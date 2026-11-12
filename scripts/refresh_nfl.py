@@ -200,7 +200,7 @@ def main():
         if b and b[0] >= 4:
             d = dict(zip(FIELDS, b[1:]))
             base_hp = kick_pts(d) if r.position == "K" else half_ppr(d)
-        if not ((grp is not None and len(grp) and cur_ppg >= 3) or (base_hp and base_hp >= 6)):
+        if not ((grp is not None and len(grp) and cur_ppg >= 0.5) or (base_hp and base_hp >= 2) or (r.status != 'ACT' and b)):
             continue
         rows = []
         if grp is not None:

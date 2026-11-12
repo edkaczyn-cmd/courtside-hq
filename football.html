@@ -417,7 +417,7 @@ function renderLeague(){
    <div class="bar"><label>Points per reception<select id="l-rec"><option value="1">PPR (1)</option><option value="0.5">Half PPR (0.5)</option><option value="0">Standard (0)</option></select></label>
     <label>Passing TD<select id="l-ptd"><option value="4">4 points</option><option value="6">6 points</option></select></label>
     <label>Passing yards per point<select id="l-pyd"><option value="25">25</option><option value="20">20</option></select></label>
-    <label>Interception<select id="l-int"><option value="-2">−2</option><option value="-1">−1</option></select></label>
+    <label>Interception<select id="l-int"><option value="-3">−3</option><option value="-2">−2</option><option value="-1">−1</option><option value="0">0</option></select></label>
     <label>TE premium (extra per catch)<select id="l-tep"><option value="0">None</option><option value="0.5">+0.5</option><option value="1">+1</option></select></label>
     ${parseSlots().K?`<label>Missed FG / XP<select id="l-fgx"><option value="-1">−1</option><option value="0">0</option></select></label>`:''}</div>
    <div class="bar"><span class="meta" style="margin:0">Quick setup · Teams:</span>${[8,10,12,14,16,18].map(n=>`<button class="btn sm ${+L.size===n?'pri':''}" data-qt="${n}">${n}</button>`).join('')}
