@@ -23,6 +23,7 @@ REL = "https://github.com/nflverse/nflverse-data/releases/download"
 HEADERS = {"User-Agent": "Mozilla/5.0 (CourtsideHQ nightly refresh)"}
 OUT = "data/nfl.json"
 POS = ["QB", "RB", "WR", "TE"]
+ALLPOS = POS + ["K"]
 
 
 def log(*a):
@@ -51,12 +52,20 @@ def stat_cols(df):
             df[c] = 0
     df["fl"] = df[["sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost"]].fillna(0).sum(axis=1)
     df["two"] = df[["passing_2pt_conversions", "rushing_2pt_conversions", "receiving_2pt_conversions"]].fillna(0).sum(axis=1)
+    z = lambda c: df[c].fillna(0) if c in df else 0
+    df["fg03"] = z("fg_made_0_19") + z("fg_made_20_29") + z("fg_made_30_39")
+    df["fg4"] = z("fg_made_40_49")
+    df["fg5"] = z("fg_made_50_59") + z("fg_made_60_")
+    df["fgx"] = z("fg_missed")
+    df["xpm"] = z("pat_made")
+    df["xpx"] = z("pat_missed")
     return df
 
 
 # per-game row: att, cmp, pyd, ptd, int, car, ryd, rtd, tgt, rec, recyd, rectd, fl, two
 FIELDS = ["attempts", "completions", "passing_yards", "passing_tds", "passing_interceptions", "carries", "rushing_yards",
-          "rushing_tds", "targets", "receptions", "receiving_yards", "receiving_tds", "fl", "two"]
+          "rushing_tds", "targets", "receptions", "receiving_yards", "receiving_tds", "fl", "two",
+          "fg03", "fg4", "fg5", "fgx", "xpm", "xpx"]
 
 
 def half_ppr(r):
@@ -71,6 +80,10 @@ def age_of(bd):
         return round((NOW.date() - d).days / 365.25, 1)
     except Exception:  # noqa: BLE001
         return None
+
+
+def kick_pts(r):
+    return 3 * num(r["fg03"]) + 4 * num(r["fg4"]) + 5 * num(r["fg5"]) + num(r["xpm"]) - num(r["fgx"]) - num(r["xpx"])
 
 
 def headlines():
@@ -101,13 +114,13 @@ def headlines():
 
 def main():
     wk = stat_cols(csv(f"{REL}/stats_player/stats_player_week_{SEASON}.csv"))
-    wk = wk[(wk.season_type == "REG") & wk.position.isin(POS)]
+    wk = wk[(wk.season_type == "REG") & wk.position.isin(ALLPOS)]
     base = stat_cols(csv(f"{REL}/stats_player/stats_player_week_{SEASON - 1}.csv"))
-    base = base[(base.season_type == "REG") & base.position.isin(POS)]
+    base = base[(base.season_type == "REG") & base.position.isin(ALLPOS)]
     roster = csv(f"{REL}/rosters/roster_{SEASON}.csv")
     if "week" in roster:
         roster = roster.sort_values("week").drop_duplicates("gsis_id", keep="last")
-    roster = roster[roster.position.isin(POS) & roster.status.isin(["ACT", "RES", "INA", "PUP", "NON", "SUS", "EXE"])]
+    roster = roster[roster.position.isin(ALLPOS) & roster.status.isin(["ACT", "RES", "INA", "PUP", "NON", "SUS", "EXE"])]
     games = csv("https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv")
     games = games[(games.season == SEASON) & (games.game_type == "REG")]
     try:
@@ -139,8 +152,8 @@ def main():
     log("current week", cur_week, "teams", len(teams))
 
     # ---- matchup multipliers (half-PPR points allowed per game, by position)
-    wk["hp"] = wk.apply(half_ppr, axis=1)
-    allowed = wk.groupby(["opponent_team", "position", "week"]).hp.sum().reset_index()
+    wk["hp"] = wk.apply(lambda r: kick_pts(r) if r.position == "K" else half_ppr(r), axis=1)
+    allowed = wk[wk.position.isin(POS)].groupby(["opponent_team", "position", "week"]).hp.sum().reset_index()
     per = allowed.groupby(["opponent_team", "position"]).hp.mean().unstack()
     lg = per.mean()
     dvp = {}
@@ -186,7 +199,7 @@ def main():
         base_hp = None
         if b and b[0] >= 4:
             d = dict(zip(FIELDS, b[1:]))
-            base_hp = half_ppr(d)
+            base_hp = kick_pts(d) if r.position == "K" else half_ppr(d)
         if not ((grp is not None and len(grp) and cur_ppg >= 3) or (base_hp and base_hp >= 6)):
             continue
         rows = []
