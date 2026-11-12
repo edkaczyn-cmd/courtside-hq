@@ -107,6 +107,8 @@ a{color:var(--acc2)}
   <button data-t="league">League Setup</button>
 </nav>
 <main>
+  <style>.lgbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:14px}.lgbar select{font-weight:600;max-width:260px}.lgsum{font-size:12.5px;color:var(--mute)}</style>
+  <div id="lgbar" class="lgbar"></div>
   <section id="t-rank"></section>
   <section id="t-trade" class="hide"></section>
   <section id="t-moves" class="hide"></section>
@@ -185,6 +187,8 @@ function buildPlayers(){
   BYKEY={};BYABBR={}; const cnt={};
   P.forEach(p=>{BYKEY[p.key]=p; const parts=p.key.split(' '); const ab=parts[0][0]+' '+parts.slice(1).join(' '); p.abbr=ab; cnt[ab]=(cnt[ab]||0)+1;});
   P.forEach(p=>{if(cnt[p.abbr]===1)BYABBR[p.abbr]=p});
+  const ALIAS={'alex sarr':'alexandre sarr','alexandre sarr':'alex sarr','nic claxton':'nicolas claxton','nicolas claxton':'nic claxton','herb jones':'herbert jones','herbert jones':'herb jones','cam johnson':'cameron johnson','cameron johnson':'cam johnson','moe wagner':'moritz wagner','moritz wagner':'moe wagner'};
+  Object.entries(ALIAS).forEach(([a,b])=>{if(!BYKEY[a]&&BYKEY[b])BYKEY[a]=BYKEY[b]});
 }
 const B=(p,basis)=>basis==='ros'?p.ros:basis==='std'?p.cur:p.last;
 
@@ -501,7 +505,7 @@ function ensureTeams(){ const n=Math.min(20,Math.max(2,+L.size||12)); while(L.te
 function renderLeague(){
   ensureTeams(); const el=$('#t-league');
   el.innerHTML=`<div class="card"><h2>League Setup</h2><p class="sub">Your league settings and rosters. Everything here is saved in this browser automatically. To move it to another computer or phone, export it there and import it.</p>
-   <div class="bar"><button class="btn" id="l-export">Export league file</button><label class="btn" style="flex-direction:row;color:inherit;font-size:inherit">Import league file<input type="file" id="l-import" accept=".json" class="hide"></label><span class="meta" id="l-io"></span></div>
+   <div class="bar"><button class="btn" id="l-export">Export all leagues</button><label class="btn" style="flex-direction:row;color:inherit;font-size:inherit">Import leagues file<input type="file" id="l-import" accept=".json" class="hide"></label><button class="btn" id="l-del" ${Object.keys(LEAGUES.list).length<2?'disabled':''} style="${delArm?'border-color:var(--bad);color:var(--bad)':''}">${delArm?'Click again to delete this league':'Delete this league'}</button><span class="meta" id="l-io"></span></div>
    <div class="note">Rosters come in by paste: open a team's page on Yahoo, select all (Ctrl/Cmd+A), copy, and paste it into that team's box. The tool picks out every player name it recognizes and ignores the rest.</div>
    <div class="bar"><label>League name<input type="text" id="l-name" value="${esc(L.name)}"></label>
     <label>Teams<input type="number" id="l-size" min="2" max="20" value="${L.size}" style="width:80px"></label>
@@ -517,8 +521,11 @@ function renderLeague(){
      <div class="picker" style="margin-top:6px" data-addp="${i}"><input type="search" placeholder="+ add a player by name" style="width:100%;font-size:12px"><div class="dd hide"></div></div>
    </div>`).join('')}</div>`;
   const upd=()=>{computeValues();save();};
-  $('#l-export').onclick=()=>{const blob=new Blob([JSON.stringify(serial(),null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='courtside-league.json';a.click();};
-  $('#l-import').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{hydrate(JSON.parse(await f.text()));computeValues();save();renderLeague();}catch(err){$('#l-io').textContent='That file could not be read.'}};
+  $('#l-export').onclick=()=>{persist();const blob=new Blob([JSON.stringify({kind:'courtside-nba-leagues',leagues:LEAGUES},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='courtside-basketball-leagues.json';a.click();};
+  $('#l-import').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const o=JSON.parse(await f.text());persist();let n=0;
+     if(o.leagues&&o.leagues.list){Object.values(o.leagues.list).forEach(lg=>{LEAGUES.list[newId()]=lg;n++})} else if(o.teams){LEAGUES.list[newId()]=o;n=1} else throw 0;
+     try{localStorage.setItem('chq_nba_leagues',JSON.stringify(LEAGUES))}catch(_){} renderLgBar(); renderLeague(); $('#l-io').textContent=` Imported ${n} league${n>1?'s':''}; pick from the League menu at the top.`;}catch(err){$('#l-io').textContent='That file could not be read.'}};
+  $('#l-del').onclick=()=>{if(!delArm){delArm=true;renderLeague();return}deleteLeague()};
   $('#l-name').onchange=e=>{L.name=e.target.value;save()};
   $('#l-size').onchange=e=>{L.size=Math.min(20,Math.max(2,+e.target.value||12));ensureTeams();upd();renderLeague()};
   $('#l-roster').onchange=e=>{L.roster=Math.min(20,Math.max(5,+e.target.value||13));upd()};
@@ -537,14 +544,28 @@ function syncNames(){L.teams.forEach(t=>t.names=(t.ids||[]).map(id=>P[id].n))}
 /* ---------- persistence ---------- */
 const STORE={mode:'local',db:null,uid:null};
 function serial(){return {name:L.name,size:L.size,roster:L.roster,slots:L.slots,cats:L.cats,punts:L.punts,my:L.my,teams:L.teams.map(t=>({name:t.name,names:(t.ids||[]).map(id=>P[id].n)}))}}
-function hydrate(o){ if(!o) return; L=Object.assign(JSON.parse(JSON.stringify(DEFAULT_LEAGUE)),o); L.teams=(o.teams||[]).map(t=>({name:t.name,ids:(t.names||[]).map(n=>BYKEY[norm(n)]).filter(Boolean).map(p=>p.id)})); L.cats=(L.cats||ALLCATS).filter(c=>CATS[c]); }
-let lastSaved='';
-const save=debounce(async()=>{const body=JSON.stringify(serial()); if(body===lastSaved) return; lastSaved=body;
-  try{ localStorage.setItem('chq_league',body); }catch(e){}
-},800);
+function hydrate(o){ if(!o) return; L=Object.assign(JSON.parse(JSON.stringify(DEFAULT_LEAGUE)),o); L.teams=(o.teams||[]).map(t=>({name:t.name,ids:(t.names||[]).map(n=>BYKEY[norm(n)]||BYABBR[norm(n)]).filter(Boolean).map(p=>p.id)})); L.cats=(L.cats||ALLCATS).filter(c=>CATS[c]); L.punts=(L.punts||[]).filter(c=>L.cats.includes(c)); }
+let LEAGUES={active:null,list:{}};
+const newId=()=>'lg'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function persist(){LEAGUES.list[LEAGUES.active]=serial();try{localStorage.setItem('chq_nba_leagues',JSON.stringify(LEAGUES))}catch(e){}}
+const save=debounce(()=>{persist();renderLgBar()},500);
 async function loadSaved(){
-  try{const s=localStorage.getItem('chq_league'); if(s){hydrate(JSON.parse(s));lastSaved=s;}}catch(e){}
+  try{const s=localStorage.getItem('chq_nba_leagues'); if(s) LEAGUES=JSON.parse(s);}catch(e){}
+  if(!LEAGUES||!LEAGUES.list||!Object.keys(LEAGUES.list).length){let first=null;try{const o=localStorage.getItem('chq_league');if(o)first=JSON.parse(o)}catch(e){} const id=newId(); LEAGUES={active:id,list:{[id]:first||JSON.parse(JSON.stringify(DEFAULT_LEAGUE))}};}
+  if(!LEAGUES.list[LEAGUES.active]) LEAGUES.active=Object.keys(LEAGUES.list)[0];
+  hydrate(LEAGUES.list[LEAGUES.active]);
 }
+function resetWork(){T.give=[];T.get=[];T.partner=-1;D=null;}
+function switchLeague(id){if(!LEAGUES.list[id])return;persist();LEAGUES.active=id;hydrate(LEAGUES.list[id]);resetWork();persist();computeValues();renderLgBar();renderAll();}
+function addLeague(copy){persist();const id=newId();let o;
+  if(copy){o=JSON.parse(JSON.stringify(serial()));o.name=L.name+' (copy)';o.teams=[];}
+  else{o=JSON.parse(JSON.stringify(DEFAULT_LEAGUE));o.name='League '+(Object.keys(LEAGUES.list).length+1);}
+  LEAGUES.list[id]=o;switchLeague(id);show('league');}
+let delArm=false;
+function deleteLeague(){if(Object.keys(LEAGUES.list).length<2)return;delete LEAGUES.list[LEAGUES.active];LEAGUES.active=Object.keys(LEAGUES.list)[0];hydrate(LEAGUES.list[LEAGUES.active]);resetWork();delArm=false;try{localStorage.setItem('chq_nba_leagues',JSON.stringify(LEAGUES))}catch(e){}computeValues();renderLgBar();show('rank');}
+function renderLgBar(){const ids=Object.keys(LEAGUES.list), cur=serial(), loaded=(cur.teams||[]).some(t=>(t.names||[]).length);
+  $('#lgbar').innerHTML=`<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mute)">League<select id="lg-sel">${ids.map(id=>`<option value="${id}" ${id===LEAGUES.active?'selected':''}>${esc(id===LEAGUES.active?cur.name:LEAGUES.list[id].name)}</option>`).join('')}</select></label><span class="lgsum">${cur.size} teams · ${cur.cats.length}-cat${cur.punts.length?' · punting '+cur.punts.join(', '):''}${loaded?' · rosters loaded':''}</span><span style="flex:1"></span><button class="btn sm" id="lg-new">+ New league</button><button class="btn sm" id="lg-dup">Duplicate settings</button><button class="btn sm" id="lg-set">Edit settings</button>`;
+  $('#lg-sel').onchange=e=>switchLeague(e.target.value);$('#lg-new').onclick=()=>addLeague(false);$('#lg-dup').onclick=()=>addLeague(true);$('#lg-set').onclick=()=>show('league');}
 
 /* ---------- modal ---------- */
 function openPlayer(id){
@@ -585,7 +606,7 @@ async function init(){
   setStamp();
   setFoot();
   const h=location.hash.slice(1); show(RENDER[h]?h:'rank');
-  loadSaved().then(()=>{computeValues();renderAll()});
+  loadSaved().then(()=>{computeValues();renderLgBar();renderAll()});
 }
 init();
 </script>

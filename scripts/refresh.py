@@ -112,6 +112,40 @@ def fetch_players():
     return players
 
 
+# ---------------------------------------------------------------- deeper player pool (ESPN)
+def fetch_espn_players(season_end_year):
+    """Every player with stats this season, so rostered players outside the top 200 still show up."""
+    out, page = [], 1
+    while page <= 6:
+        j = requests.get("https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/statistics/byathlete",
+                         params={"region": "us", "lang": "en", "contentorigin": "espn", "isqualified": "false", "page": page,
+                                 "limit": 100, "season": season_end_year, "seasontype": 2, "sort": "general.avgMinutes:desc"},
+                         headers=HEADERS, timeout=40).json()
+        cats = {c["name"]: c.get("names", []) for c in j.get("categories", [])}
+        if (j.get("requestedSeason") or {}).get("year") not in (None, season_end_year):
+            raise RuntimeError("ESPN returned the wrong season")
+        for a in j.get("athletes", []):
+            ath = a.get("athlete", {})
+            vals = {}
+            for c in a.get("categories", []):
+                for k, v in zip(cats.get(c.get("name"), []), c.get("totals") or c.get("values") or []):
+                    vals[k] = v
+            tm = team(ath.get("teamShortName") or (ath.get("team") or {}).get("abbreviation"))
+            gp, mpg = first_num(str(vals.get("gamesPlayed", 0))) or 0, first_num(str(vals.get("avgMinutes", 0))) or 0
+            if not tm or gp < 1 or mpg < 8:
+                continue
+            ab = ((ath.get("position") or {}).get("abbreviation") or "").upper()
+            pos = {"PG": "PG", "SG": "SG", "G": "PG/SG", "SF": "SF", "PF": "PF", "F": "SF/PF", "C": "C", "GF": "SG/SF", "FC": "PF/C"}.get(ab, "SF/PF")
+            g = lambda k: float(first_num(str(vals.get(k, 0))) or 0)
+            out.append(dict(n=ath.get("displayName"), pos=pos, t=tm, gp=gp, mpg=mpg, fgm=g("avgFieldGoalsMade"), fga=g("avgFieldGoalsAttempted"),
+                            ftm=g("avgFreeThrowsMade"), fta=g("avgFreeThrowsAttempted"), tpm=g("avgThreePointFieldGoalsMade"),
+                            pts=g("avgPoints"), reb=g("avgRebounds"), ast=g("avgAssists"), stl=g("avgSteals"), blk=g("avgBlocks"), to=g("avgTurnovers")))
+        if page >= ((j.get("pagination") or {}).get("pages") or 1):
+            break
+        page += 1
+    return out
+
+
 # ---------------------------------------------------------------- injuries
 def fetch_injuries():
     j = requests.get("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries", headers=HEADERS, timeout=40).json()
@@ -255,6 +289,16 @@ def main():
     except Exception as e:  # noqa: BLE001
         log("WARN player stats kept from last run:", e)
 
+    try:
+        season_end = TODAY.year + (1 if TODAY.month >= 7 else 0)
+        extra = fetch_espn_players(season_end)
+        have = {norm(p["n"]) for p in new["players"]}
+        added = [p for p in extra if norm(p["n"]) not in have]
+        new["players"] = new["players"] + added
+        log("deeper pool from ESPN: +", len(added), "players")
+    except Exception as e:  # noqa: BLE001
+        log("WARN ESPN deeper pool skipped:", e)
+
     played = None
     try:
         new["week"], played = fetch_schedule()
@@ -285,6 +329,7 @@ def main():
 
     # validation: never publish a broken file
     assert len(new["players"]) >= 150, "too few players"
+    assert len(new["players"]) <= 700, "too many players"
     for p in new["players"]:
         assert p["t"] in TEAMS and all(isinstance(p[k], (int, float)) for k in STATS), p
     assert set(new["week"]["days"]) >= set(TEAMS) and set(new["teamGP"]) >= set(TEAMS)
