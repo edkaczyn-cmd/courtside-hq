@@ -1,6 +1,10 @@
 # Courtside HQ
 
-A personal fantasy basketball tool: rest-of-season rankings with punting, a trade analyzer, buy-low/sell-high and pickup lists, a weekly lineup planner and mock drafts. It runs entirely in the browser; no AI and no accounts are involved.
+Personal fantasy tools for basketball (`index.html`) and football (`football.html`).
+
+**Football:** rest-of-season rankings with points above replacement, a trade analyzer that simulates your starting lineup week by week (playoff weeks called out) and values future draft picks, buy-low/sell-high and waiver lists, a weekly lineup planner, and a mock draft for next season. Data: nflverse via `scripts/refresh_nfl.py` → `data/nfl.json`, refreshed nightly.
+
+**Basketball:** rest-of-season rankings with punting, a trade analyzer, buy-low/sell-high and pickup lists, a weekly lineup planner and mock drafts. It runs entirely in the browser; no AI and no accounts are involved.
 
 - **Site:** served by GitHub Pages from this repository (`index.html`).
 - **Data:** `data/nba.json` is rebuilt every night by `.github/workflows/refresh.yml`, which runs `scripts/refresh.py`:
