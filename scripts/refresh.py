@@ -148,7 +148,36 @@ def fetch_injuries():
 
 # ---------------------------------------------------------------- schedule
 def fetch_schedule():
-    j = requests.get("https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json", headers=HEADERS, timeout=60).json()
+    try:
+        return fetch_schedule_nba()
+    except Exception as e:  # noqa: BLE001
+        log("NBA.com schedule unavailable, using ESPN:", e)
+        return fetch_schedule_espn()
+
+
+def fetch_schedule_espn():
+    monday = TODAY - dt.timedelta(days=TODAY.weekday())
+    days = {t: [0] * 7 for t in TEAMS}
+    for off in range(7):
+        d = monday + dt.timedelta(days=off)
+        j = requests.get("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
+                         params={"dates": d.strftime("%Y%m%d"), "limit": 50}, headers=HEADERS, timeout=30).json()
+        for ev in j.get("events", []):
+            if (ev.get("season") or {}).get("type") not in (None, 2):  # 2 = regular season
+                continue
+            for comp in ev.get("competitions", [])[:1]:
+                for c in comp.get("competitors", []):
+                    tm = team((c.get("team") or {}).get("abbreviation"))
+                    if tm:
+                        days[tm][off] = 1
+    if sum(map(sum, days.values())) == 0 and TODAY.month not in (7, 8, 9):
+        raise RuntimeError("empty week from ESPN")
+    return dict(start=monday.isoformat(), days=days), None
+
+
+def fetch_schedule_nba():
+    hdr = dict(HEADERS, Referer="https://www.nba.com/", Origin="https://www.nba.com", Accept="application/json")
+    j = requests.get("https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json", headers=hdr, timeout=60).json()
     monday = TODAY - dt.timedelta(days=TODAY.weekday())
     days = {t: [0] * 7 for t in TEAMS}
     played = {t: 0 for t in TEAMS}
@@ -226,12 +255,15 @@ def main():
     except Exception as e:  # noqa: BLE001
         log("WARN player stats kept from last run:", e)
 
+    played = None
     try:
         new["week"], played = fetch_schedule()
-        new["teamGP"] = {t: played[t] for t in TEAMS}
         log("week of", new["week"]["start"])
     except Exception as e:  # noqa: BLE001
         log("WARN schedule kept from last run:", e)
+    if played:
+        new["teamGP"] = {t: played[t] for t in TEAMS}
+    else:  # games played = most games by any player on the team
         gp = {}
         for p in new["players"]:
             gp[p["t"]] = max(gp.get(p["t"], 0), p.get("gp") or 0)
@@ -248,7 +280,7 @@ def main():
     cutoff = (TODAY - dt.timedelta(days=21)).isoformat()
     new["buzz"] = [b for b in old.get("buzz", []) if (b.get("date") or "") >= cutoff]
     new["sources"] = ["Hashtag Basketball (season stats & positions)", "Basketball-Reference (2025-26 baseline)",
-                      "ESPN (injuries)", "NBA.com (schedule)", "Google News (headlines)"]
+                      "ESPN (injuries)", "NBA.com / ESPN (schedule)", "Google News (headlines)"]
     new["updated"] = NOW.isoformat(timespec="seconds")
 
     # validation: never publish a broken file
