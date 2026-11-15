@@ -379,12 +379,12 @@ function renderMoves(){
   const risers=P.filter(p=>p.on&&p.pos!=='K'&&p.games.length>=4&&p.st==='ACT').map(p=>{const l3=p.games.slice(-3),early=p.games.slice(0,-3); const snapUp=(avgK(l3.filter(g=>g.snap!=null),'snap')||0)-(avgK(early.filter(g=>g.snap!=null),'snap')||0); const oppUp=(avgK(l3,'car')+avgK(l3,'tgt'))-(avgK(early,'car')+avgK(early,'tgt')); return {p,snapUp,oppUp,score:snapUp/10+oppUp/3}}).filter(x=>(x.snapUp>=12||x.oppUp>=4)&&x.p.pos!=='QB').sort((a,b)=>b.score-a.score).slice(0,12);
   const outStarters=P.filter(p=>(p.st==='RES'||(p.inj&&/out/i.test(p.inj.s)))&&p.rk<=N*8);
   // rank by value over a waiver-level player at the same position (p.vor), not raw points, so QBs don't crowd out everyone else
-  const sl=parseSlots(), posCap={QB:(sl.SFLEX||(sl.QB||0)>1)?5:3,RB:6,WR:6,TE:4}, posN={};
   const wav=P.filter(p=>isAvailable(p)&&p.st==='ACT'&&p.ros>0&&p.pos!=='K').map(p=>{const t=[];let s=p.vor;
       const m=outStarters.filter(o=>o.t===p.t&&o.pos===p.pos&&o.id!==p.id); if(m.length){t.push('Opportunity: '+m.map(o=>esc(o.n)+(o.st==='RES'?' on IR':' out')).join(', ')); s+=10;}
       const r=risers.find(x=>x.p.id===p.id); if(r){t.push(`Usage rising (${r.snapUp>=1?'+'+f0(r.snapUp)+'% snaps':''}${r.oppUp>=1?' +'+f1(r.oppUp)+' touches/tgts':''})`); s+=8;}
       if(p.rosM&&p.rosM>=1.05) t.push('Soft remaining schedule'); if(p.poM&&p.poM>=1.06) t.push('Good playoff matchups');
-      return {p,s,t}}).sort((a,b)=>b.s-a.s).filter(({p})=>(posN[p.pos]=(posN[p.pos]||0)+1)<=(posCap[p.pos]??3)).slice(0,15);
+      return {p,s,t}}).sort((a,b)=>b.s-a.s);
+  const wavBy=POS.map(pos=>[pos,wav.filter(x=>x.p.pos===pos).slice(0,5)]);
   const item=(p,why,extra='')=>`<div class="it"><div>${pname(p)} <span class="meta">${p.prk} · ROS #${p.rk}</span>${extra}</div><div class="why">${why}</div></div>`;
   const tdTxt=l=>Math.abs(l.diff)>=1.5?` ${f0(l.act)} TDs scored vs about ${f1(l.exp)} expected from his volume.`:'';
   el.innerHTML=`${lg?`<div class="bar"><label>Show players<select id="ms-scope"><option value="all">All</option><option value="mine">On my team</option><option value="others">On other teams</option></select></label></div>`:'<div class="note">Load your league in League Setup to split these lists into your players, other teams\' players, and true free agents.</div>'}
@@ -394,7 +394,7 @@ function renderMoves(){
   </div>
   <div class="grid2">
    <div class="card"><h3>🚀 Usage risers</h3><p class="sub">Snap share or touches/targets up over the last three games compared with earlier in the season.</p><div class="list">${risers.map(({p,snapUp,oppUp})=>item(p,`${snapUp>=1?'Snaps +'+f0(snapUp)+' pts':''}${snapUp>=1&&oppUp>=1?' · ':''}${oppUp>=1?'Touches + targets +'+f1(oppUp)+'/game':''} · now ${usageTxt(p)}`)).join('')||'<div class="empty">No big usage jumps</div>'}</div></div>
-   <div class="card"><h3>🧲 Waiver targets</h3><p class="sub">${fullLeague()?'Free agents in your league':'Players likely available in a 12-team league'}, ranked by rest-of-season value over a typical waiver pickup at the same position, plus opportunity. Each position gets a few spots so one position can't fill the list.</p><div class="list">${wav.map(({p,t})=>item(p,`${f1(p.ppg)} proj PPG · ${f0(p.ros)} ROS pts${t.length?' · '+t.join(' · '):''}`)).join('')}</div></div>
+   <div class="card"><h3>🧲 Waiver targets</h3><p class="sub">${fullLeague()?'Free agents in your league':'Players likely available in a 12-team league'}, ranked by rest-of-season value over a typical waiver pickup at the same position, plus opportunity. Top 5 at each position.</p>${wavBy.map(([pos,arr])=>`<h4 style="margin:12px 0 4px">${pos}</h4><div class="list">${arr.map(({p,t})=>item(p,`${f1(p.ppg)} proj PPG · ${f0(p.ros)} ROS pts${t.length?' · '+t.join(' · '):''}`)).join('')||'<div class="empty">None available</div>'}</div>`).join('')}</div>
   </div>
   ${(DATA.news||[]).length?`<div class="card"><h3>🗞️ Latest fantasy football reads</h3><p class="sub">Headlines from the past week, refreshed nightly. Players in the headline are tagged.</p><div class="list">${DATA.news.map(n=>{const tg=P.filter(p=>p.rk<=250&&norm(n.title).includes(p.key)); return `<div class="it"><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)}</a> <span class="meta">${esc(n.src||'')}${n.date?' · '+new Date(n.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):''}</span>${tg.length?`<div class="why">${tg.map(pname).join(' &nbsp; ')}</div>`:''}</div>`}).join('')}</div></div>`:''}`;
   const sc=$('#ms-scope'); if(sc){sc.value=MS.scope;sc.onchange=e=>{MS.scope=e.target.value;renderMoves()}}
