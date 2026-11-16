@@ -148,8 +148,11 @@ def band(c, bands):
     return bands[-1][2]
 
 
-def winners_of(rows, n=15, fin_max=60):
-    w = [r for r in rows if r["fin"] <= fin_max and r["profit"] > 0]
+def winners_of(rows, n=15, fin_max=60, jump=24):
+    """League winner = finished inside the top `fin_max` AND at least two rounds (24 picks) better than his draft cost.
+    A star who goes 3rd and finishes 1st met expectations; he didn't win anyone a league."""
+    w = [r for r in rows if r["fin"] <= fin_max and r["profit"] > 0
+         and (r.get("cost") is None or r["fin"] <= r["cost"] - jump)]
     return sorted(w, key=lambda r: -r["profit"])[:n]
 
 
@@ -456,7 +459,7 @@ def nfl():
                     checks["unlucky"] = False
                 score = sum(checks.values()) + min(1.0, max(0.0, (r["use"] or 0) / max(1, need * 1.5))) - (0.75 if shares else 0)
                 checks["shares"] = shares            # warning, not a plus: not counted toward the 3 traits
-                if sum(v for k, v in checks.items() if k != "shares") >= 3 and checks["role"] and checks["cheap"]:
+                if sum(v for k, v in checks.items() if k not in ("shares", "cheap")) >= 3 and checks["role"] and checks["cheap"]:
                     cand.append(dict({k: v for k, v in r.items() if k != "_p"}, checks=checks, score=round(score, 2),
                                      exp_td=r1(exp_td), nxt=r1(next_cost(r), 0)))
             cand.sort(key=lambda x: -x["score"])
@@ -590,7 +593,7 @@ def nba():
             for r in rows:
                 r["val"] = round((r["vpg"] or 0) * 70, 1) if r["gp"] >= 5 else -99
         add_profit(rows, undrafted=156 if real_adp else 200)
-        w = winners_of(rows, n=20 if s == cur else 15)
+        w = winners_of(rows, n=15)
         lab = f"{s - 1}-{str(s)[2:]}"
         blk = dict(key=str(s), label=f"{lab} so far" if s == cur else f"{lab} season",
                    cost="ESPN ADP" if real_adp else "ESPN preseason rank (ESPN drops ADP after the season)",
@@ -621,11 +624,14 @@ def nba():
                 "minutes": r["dmin"] is not None and r["dmin"] >= dmin_cut,
                 "usage": r["dusg"] is not None and r["dusg"] >= 1.0,
                 "role": r["mpg"] >= mpg_cut - 2,
-                "beating": r["profit"] > 0,
+                # finishing 2+ rounds better than his cost; undrafted players must produce at a top-100 level
+                "beating": r["fin"] <= 100 and (r["cost"] is None or r["fin"] <= r["cost"] - 24),
                 "cheap": (next_cost(r) or 999) >= 73,
             }
+            if r["fin"] > 120:          # not producing at a rosterable 12-team level yet
+                continue
             score = sum(checks.values()) + max(0.0, min(1.0, (r["vpg"] or 0) / 5))
-            if sum(checks.values()) >= 3 and (checks["minutes"] or checks["usage"]) and checks["cheap"]:
+            if sum(v for k, v in checks.items() if k != "cheap") >= 3 and (checks["minutes"] or checks["usage"]) and checks["cheap"]:
                 cand.append(dict(r, checks=checks, score=round(score, 2), nxt=r1(next_cost(r), 0)))
         cand.sort(key=lambda x: -x["score"])
         lab = f"{cur}-{str(cur + 1)[2:]}"
@@ -634,7 +640,7 @@ def nba():
                                     desc="A minutes jump was the most common trait of past league winners."),
                                dict(k="usage", label="Usage up 1+ per 36", desc="More shots, free throws and ball-handling than last season."),
                                dict(k="role", label=f"Starter minutes ({mpg_cut - 2:.0f}+)", desc="Playing the minutes past league winners played."),
-                               dict(k="beating", label="Beating his draft cost", desc="Producing above what his draft slot normally returns."),
+                               dict(k="beating", label="Beating his draft cost", desc="Producing at least two rounds better than where he was drafted, and inside the top 100 per game."),
                                dict(k="cheap", label="Should still be cheap (round 7+)",
                                     desc="Next year's price, estimated from this year's ADP and his finish so far, is round 7 or later.")],
                        rows=cand[:30])
@@ -848,7 +854,7 @@ def mlb():
                       "playing": (r.get("ip") or 0) >= 120 or (r.get("sv") or 0) >= 15,
                       "cheap": (next_cost(r) or 999) >= 85}
         n = sum(checks.values())
-        if n >= 3 and checks["skills"] and checks["cheap"]:
+        if n - 1 >= 3 and checks["skills"] and checks["cheap"]:
             cand.append(dict(r, checks=checks, score=round(n + max(0, min(1, (r["val"] + 3) / 6)), 2), nxt=r1(next_cost(r), 0)))
     cand.sort(key=lambda x: -x["score"])
     late = sum(b["winners"] for b in bands[2:])

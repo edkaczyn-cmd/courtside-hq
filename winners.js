@@ -91,7 +91,7 @@
     return `<div class="card"><div class="sec-h"><h2>🎯 ${e(t.label)}</h2>
       <div class="bar" style="margin:0">${hasOwn ? `<label>Owner<select id="lw-own"><option value="all">Everyone</option><option value="avail" ${st.own === 'avail' ? 'selected' : ''}>Free agents</option><option value="mine" ${st.own === 'mine' ? 'selected' : ''}>On my team</option><option value="others" ${st.own === 'others' ? 'selected' : ''}>On other teams</option></select></label>` : ''}
       <label>Position<select id="lw-tpos">${['ALL', ...poss].map(p => `<option ${p === st.tpos ? 'selected' : ''}>${e(p)}</option>`).join('')}</select></label></div></div>
-      <p class="sub">This season's players scored against the traits past league winners shared. Every player here passes the cost check and at least three traits in all, so the list favors players you can still get at a discount.</p>
+      <p class="sub">This season's players scored against the traits past league winners shared. Every player here should still be cheap next year and shows at least three of the other traits.</p>
       ${ownNote(sport)}
       <div class="lw-legend">${t.checks.map(c => `<div${c.warn ? ' style="background:#fff8ec;border-color:#f3dcae"' : ''}><b>${c.warn ? '⚠ ' : ''}${e(c.label)}</b>${e(c.desc)}</div>`).join('')}</div>
       ${rows.length ? `<div class="tw"><table><thead><tr><th class="l">Player</th>${hasOwn ? '<th class="l">Owner</th>' : ''}${head(cols)}<th title="Where he should go in next year's 12-team drafts (round.pick), estimated from this year's draft position and his finish. The market prices in a breakout, so the finish counts more.">Est. next-year pick</th>${t.checks.map(c => `<th title="${e(c.desc)}">${e(c.label.split(' (')[0])}</th>`).join('')}</tr></thead><tbody>
