@@ -687,6 +687,7 @@ def nba():
         for r in cur_rows:
             r["age_now"] = r["age"]
         young_cut = 24.5
+        usg_win = med([r["usg"] for r in all_w]) or 16
         dt_rows = []
         for r in cur_rows:
             if r["gp"] < 5 or r.get("age") is None or r["mpg"] is None:
@@ -695,7 +696,7 @@ def nba():
             checks = {
                 "young": r["age"] <= young_cut,
                 "minutes": (r["dmin"] is not None and r["dmin"] >= 2) or (rookie and r["mpg"] >= 24),
-                "usage": r["dusg"] is not None and r["dusg"] >= 1.0,
+                "usage": (r["dusg"] is not None and r["dusg"] >= 1.0) or (rookie and (r["usg"] or 0) >= usg_win),
                 "producing": r["fin"] <= 150,
                 "unpriced": r["cost"] is None or r["cost"] >= 60,
             }
@@ -710,7 +711,7 @@ def nba():
             targets=dict(label="Dynasty targets: young players with growing roles", season=cur,
                          checks=[dict(k="young", label=f"Age {young_cut:g} or younger", desc="Years of prime ahead: the dynasty premium."),
                                  dict(k="minutes", label="Minutes up 2+ (or a rookie playing 24+)", desc="The role is growing, the most common league-winner trait."),
-                                 dict(k="usage", label="Usage up 1+ per 36", desc="More shots, free throws and ball-handling than last season."),
+                                 dict(k="usage", label="Usage up 1+ per 36 (rookies: at league-winner level)", desc="More shots, free throws and ball-handling than last season; for rookies, usage already at the level past league winners had."),
                                  dict(k="producing", label="Top-150 per game now", desc="Already producing at a rosterable level."),
                                  dict(k="unpriced", label="Not priced as a star (ADP 60+)", desc="This year's market didn't treat him as a core piece, so trade cost may still be reasonable.")],
                          rows=dt_rows[:25]),
