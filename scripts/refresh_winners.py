@@ -224,6 +224,7 @@ def nfl_season(season):
     wk["tm_tgt"] = [team_tgt.get((t, w), 0) for t, w in zip(wk.team, wk.week)]
     wk["tm_car"] = [team_car.get((t, w), 0) for t, w in zip(wk.team, wk.week)]
     last_wk = int(wk.week.max())
+    team_weeks = {t: sorted(x.week.unique().tolist()) for t, x in wk.groupby("team")}
     out = {}
     for pid, g in wk.groupby("player_id"):
         g = g.sort_values("week")
@@ -231,7 +232,8 @@ def nfl_season(season):
         gp = len(g)
         tgt, car = g.targets.fillna(0).sum(), g.carries.fillna(0).sum()
         po = g[g.week.isin([15, 16, 17])]
-        l4 = g[g.week > last_wk - 4]
+        tw = team_weeks.get(r.team, [])[-4:]          # the team's last 4 games, not his last 4 appearances
+        l4 = g[(g.week.isin(tw)) & (g.team == r.team)]
         out[pid] = dict(
             id=pid, n=r.player_display_name, pos=r.position, t=r.team, gp=gp, pts=float(g.pts.sum()),
             ppg=float(g.pts.sum()) / gp, tgt=tgt, car=car,
@@ -242,7 +244,9 @@ def nfl_season(season):
             tds=float(g.rushing_tds.fillna(0).sum() + g.receiving_tds.fillna(0).sum() + g.passing_tds.fillna(0).sum()),
             rz=None, po_ppg=float(po.pts.mean()) if len(po) else None,
             rec=g.receptions.fillna(0).sum(), ryd=g.rushing_yards.fillna(0).sum(), recyd=g.receiving_yards.fillna(0).sum(),
-            rtd=g.rushing_tds.fillna(0).sum(), rectd=g.receiving_tds.fillna(0).sum())
+            rtd=g.rushing_tds.fillna(0).sum(), rectd=g.receiving_tds.fillna(0).sum(),
+            wk={int(w): (tm, float(c or 0) + float(t or 0)) for w, tm, c, t in zip(g.week, g.team, g.carries.fillna(0), g.targets.fillna(0))},
+            l4n=len(l4), team_last=team_weeks.get(r.team, [])[-4:])
     return out, last_wk
 
 
@@ -387,19 +391,49 @@ def nfl():
                 ps = [r["_p"] for r in rows if r["pos"] == pos]
                 td_rate[pos] = (sum(p["rtd"] for p in ps) / max(1, sum(p["car"] for p in ps)),
                                 sum(p["rectd"] for p in ps) / max(1, sum(p["tgt"] for p in ps)))
-            cand = []
+            # fill-in detection: touches earned while a teammate at his position, drafted ahead of him, was out
+            by_team = {}
+            for pid2, p2 in lines[cur].items():
+                by_team.setdefault((p2["t"], p2["pos"]), []).append((pid2, p2))
+            def fill_in_share(pid, p, c):
+                ahead = [p2 for pid2, p2 in by_team.get((p["t"], p["pos"]), []) if pid2 != pid
+                         and cost.get(pid2) is not None and (c is None or cost[pid2] < c)]
+                if not ahead:
+                    return 0.0, []
+                tot = fill = 0.0
+                missing = set()
+                for w, (tm, touches) in p["wk"].items():
+                    if tm != p["t"]:
+                        continue
+                    out_now = [p2["n"] for p2 in ahead if w not in p2["wk"]]
+                    tot += touches
+                    if out_now:
+                        fill += touches
+                        missing.update(out_now)
+                return (fill / tot if tot else 0.0), sorted(missing)
+            cand, excluded = [], []
             for r in rows:
                 p, pos = r["_p"], r["pos"]
                 if p["gp"] < 3:
                     continue
+                fshare, blockers = fill_in_share(next(k for k, v in lines[cur].items() if v is p), p, r["cost"])
+                r["fill"] = round(fshare, 2)
+                r["fill_by"] = blockers if fshare >= 0.5 else []
+                played_recent = p["l4n"] >= 2         # played in at least 2 of his team's last 4 games
+                if fshare >= 0.5 and r["use"] is not None and r["use"] >= need * 0.9:
+                    log(f"    fill-in role, not counted: {r['n']} ({r['t']}) — {round(100 * fshare)}% of touches while {', '.join(r['fill_by'])} out")
+                    excluded.append(dict(n=r["n"], t=r["t"], pos=pos,
+                                         why=f"{round(100 * fshare)}% of his touches came while {', '.join(r['fill_by'])} (drafted ahead of him) was out"))
                 ub = use_by_pos[pos]
                 need = ub["winners"] if ub["winners"] is not None else 0
                 exp_td = (p["car"] * td_rate[pos][0] + p["tgt"] * td_rate[pos][1]) if pos in td_rate else None
                 checks = {
                     "young": r["age"] is not None and r["age"] <= age_cut,
-                    "role": r["use"] is not None and r["use"] >= need * 0.9,
-                    "rising": (r["use4"] is not None and r["use"] is not None and r["use4"] >= r["use"] * 1.1)
-                              or (r["use_prev"] is not None and r["use"] is not None and r["use"] >= r["use_prev"] * 1.25),
+                    # a workload that only existed while the drafted starter was out doesn't count
+                    "role": r["use"] is not None and r["use"] >= need * 0.9 and fshare < 0.5,
+                    "rising": played_recent and fshare < 0.5 and (
+                              (r["use4"] is not None and r["use"] is not None and r["use4"] >= r["use"] * 1.1)
+                              or (r["use_prev"] is not None and r["use"] is not None and r["use"] >= r["use_prev"] * 1.25)),
                     "cheap": (next_cost(r) or 999) >= 73,
                     "unlucky": exp_td is not None and p["tds"] < exp_td - 0.5,
                 }
@@ -414,14 +448,14 @@ def nfl():
                            checks=[dict(k="young", label=f"Age {age_cut:g} or younger",
                                         desc="Most past league winners were young enough to still be improving."),
                                    dict(k="role", label="League-winner workload",
-                                        desc="Usage at or near what past league winners at his position had."),
+                                        desc="Usage at or near what past league winners at his position had, and not mostly earned while a teammate drafted ahead of him was out."),
                                    dict(k="rising", label="Role growing",
-                                        desc="Usage up over the last 4 weeks, or well above last season."),
+                                        desc="Usage up over his team's last 4 games (and he played in them), or well above last season."),
                                    dict(k="cheap", label="Should still be cheap (round 7+)",
                                         desc="Next year's price, estimated from this year's ADP and finish, is round 7 or later: where 3 of 4 past league winners came from."),
                                    dict(k="unlucky", label="Touchdowns below his volume",
                                         desc="Scored fewer TDs than his touches usually produce, so his points undersell the role.")],
-                           rows=cand[:30])
+                           rows=cand[:30], excluded=excluded)
             log("  NFL targets:", ", ".join(x["n"] for x in cand[:8]))
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()

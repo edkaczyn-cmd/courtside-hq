@@ -42,6 +42,7 @@
     if (c.k === 'cost' && v == null) return `<td title="Not drafted">UD</td>`;
     return `<td>${fmt(v, f)}</td>`;
   }
+  const rp = n => { if (n == null) return '–'; n = Math.max(1, Math.round(n)); if (n > 240) return 'Late / undrafted'; return `Rd ${Math.floor((n - 1) / 12) + 1}.${String((n - 1) % 12 + 1).padStart(2, '0')}`; };
   const head = cols => cols.map(c => `<th class="${c.k === 'pos' ? 'l' : ''}" title="${e(c.tip || '')}">${e(c.label)}</th>`).join('');
   const nameCell = r => `<td class="l"><b>${e(r.n)}</b><span class="meta">${e(r.t || '')}</span></td>`;
 
@@ -72,9 +73,11 @@
       <label class="meta">Show <select id="lw-tpos">${['ALL', ...poss].map(p => `<option ${p === st.tpos ? 'selected' : ''}>${e(p)}</option>`).join('')}</select></label></div>
       <p class="sub">This season's players scored against the traits past league winners shared. Every player here passes the cost check and at least three traits in all, so the list favors players you can still get at a discount.</p>
       <div class="lw-legend">${t.checks.map(c => `<div><b>${e(c.label)}</b>${e(c.desc)}</div>`).join('')}</div>
-      ${rows.length ? `<div class="tw"><table><thead><tr><th class="l">Player</th>${head(cols)}<th title="Rough guess at next year's draft cost: blends this year's cost with his finish">Next-yr cost</th>${t.checks.map(c => `<th title="${e(c.desc)}">${e(c.label.split(' (')[0])}</th>`).join('')}</tr></thead><tbody>
-        ${rows.map(r => `<tr>${nameCell(r)}${cols.map(c => cell(c, r)).join('')}<td>${fmt(r.nxt, '0')}</td>${t.checks.map(c => `<td style="text-align:center"><span class="lw-ck ${r.checks[c.k] ? 'y' : 'n'}">${r.checks[c.k] ? '✓' : '·'}</span></td>`).join('')}</tr>`).join('')}
-      </tbody></table></div>` : '<div class="empty">No players match enough traits yet.</div>'}</div>`;
+      ${rows.length ? `<div class="tw"><table><thead><tr><th class="l">Player</th>${head(cols)}<th title="Where he should go in next year's 12-team drafts (round.pick), estimated from this year's draft position and his finish. The market prices in a breakout, so the finish counts more.">Est. next-year pick</th>${t.checks.map(c => `<th title="${e(c.desc)}">${e(c.label.split(' (')[0])}</th>`).join('')}</tr></thead><tbody>
+        ${rows.map(r => `<tr>${nameCell(r)}${cols.map(c => cell(c, r)).join('')}<td title="About pick ${fmt(r.nxt, '0')}">${rp(r.nxt)}</td>${t.checks.map(c => `<td style="text-align:center"><span class="lw-ck ${r.checks[c.k] ? 'y' : 'n'}">${r.checks[c.k] ? '✓' : '·'}</span></td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>` : '<div class="empty">No players match enough traits yet.</div>'}
+      ${(t.excluded || []).length ? `<details style="margin-top:10px"><summary class="meta" style="cursor:pointer;margin:0">Big workloads not counted: fill-in roles (${t.excluded.length})</summary>
+        <div class="list" style="margin-top:6px">${t.excluded.map(x => `<div class="it"><b>${e(x.n)}</b><span class="meta">${e(x.pos)} · ${e(x.t)}</span><div class="why">${e(x.why)}</div></div>`).join('')}</div></details>` : ''}</div>`;
   }
 
   function seasons(d, sport) {
