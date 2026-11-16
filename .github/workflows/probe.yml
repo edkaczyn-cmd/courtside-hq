@@ -1,5 +1,6 @@
 name: Probe data sources (temporary)
 on: { workflow_dispatch: {} }
+permissions: { contents: write }
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -7,5 +8,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: pip install requests
       - run: python scripts/probe_sources.py
-      - uses: actions/upload-artifact@v4
-        with: { name: raw, path: raw, retention-days: 3 }
+      - run: |
+          git config user.name "courtside-bot"; git config user.email "courtside-bot@users.noreply.github.com"
+          git checkout --orphan tmp-raw && git rm -rq --cached . && git add raw && git commit -qm "raw source snapshot (temporary)" && git push -f origin tmp-raw
