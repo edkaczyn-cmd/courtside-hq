@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Courtside HQ — Fantasy Baseball</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#14171c;--mute:#5e6673;--line:#e3e6eb;--hd:#11161f;--acc:#e8641b;--acc2:#1d5fd1;--good:#1e8e4e;--bad:#c93a2e;--warn:#b7791f;--chip:#eef1f5}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+header{background:var(--hd);color:#fff;padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;z-index:20}
+.brand{font-weight:700;font-size:17px;letter-spacing:.2px;display:flex;align-items:center;gap:8px}
+.brand i{display:inline-block;width:18px;height:18px;border-radius:50%;background:var(--acc);box-shadow:inset -4px -3px 0 rgba(0,0,0,.18)}
+.sport{display:flex;gap:6px}
+.pill{border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:3px 10px;font-size:12px;color:#cfd6e2;background:transparent}
+.pill.on{background:#fff;color:var(--hd);border-color:#fff;font-weight:600}
+.pill[disabled]{opacity:.55}
+.stamp{margin-left:auto;font-size:12px;color:#aab3c2}
+nav{background:#1a2130;display:flex;gap:2px;padding:0 10px;overflow-x:auto;position:sticky;top:50px;z-index:19}
+nav button{background:none;border:0;color:#b9c2d0;padding:11px 14px;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;font-weight:500}
+nav button.on{color:#fff;border-bottom-color:var(--acc)}
+main{max-width:1280px;margin:0 auto;padding:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+h2{font-size:18px;margin:0 0 4px}
+h3{font-size:15px;margin:0 0 8px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 12px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.bar label{font-size:12px;color:var(--mute);display:flex;flex-direction:column;gap:3px}
+select,input[type=text],input[type=number],input[type=search],textarea{border:1px solid #cfd4dc;border-radius:7px;padding:6px 9px;background:#fff}
+textarea{width:100%;min-height:90px;resize:vertical;font-size:12.5px}
+.btn{border:1px solid #cfd4dc;background:#fff;border-radius:7px;padding:6px 12px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:#9aa3b0}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.sm{padding:3px 8px;font-size:12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;user-select:none}
+.chip.on{background:#fde7da;border-color:#f3a77c;color:#9a3a07;text-decoration:line-through}
+.chip.x:after{content:" ×";color:var(--mute)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{position:sticky;top:0;background:#f7f8fa;text-align:right;font-weight:600;color:#3b4250;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer}
+th.l,td.l{text-align:left}
+td{padding:6px 8px;border-bottom:1px solid #f0f2f5;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+tr:hover td{background:#fafbfc}
+tr.mine td{background:#fff7f1}
+.pn{font-weight:600;cursor:pointer;color:var(--ink)}
+.pn:hover{color:var(--acc2);text-decoration:underline}
+.meta{color:var(--mute);font-size:11.5px;margin-left:5px}
+.tag{display:inline-block;font-size:10.5px;font-weight:600;border-radius:4px;padding:1px 5px;margin-left:5px;vertical-align:1px}
+.t-out{background:#fde2df;color:#a32a1f}.t-gtd{background:#fdf1d6;color:#8a5a0b}.t-own{background:#e6eefc;color:#1d4fb0}.t-me{background:#fde7da;color:#9a3a07}
+.t-buy{background:#ddf3e6;color:#17693b}.t-sell{background:#fde2df;color:#a32a1f}.t-add{background:#e6eefc;color:#1d4fb0}.t-brk{background:#efe5fb;color:#5b2ea6}
+.val{font-weight:700}
+.up{color:var(--good)}.dn{color:var(--bad)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}nav{top:0;position:relative}header{position:relative}}
+.list .it{padding:10px 0;border-bottom:1px solid #f0f2f5}
+.list .it:last-child{border-bottom:0}
+.why{color:#3b4250;font-size:12.5px;margin-top:3px}
+.kpi{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.kpi div{background:#f7f8fa;border:1px solid var(--line);border-radius:8px;padding:9px 12px;min-width:130px}
+.kpi b{display:block;font-size:20px}
+.kpi span{font-size:11.5px;color:var(--mute)}
+.verdict{font-size:20px;font-weight:700;padding:10px 14px;border-radius:8px;margin:6px 0 4px;display:inline-block}
+.v-win{background:#ddf3e6;color:#17693b}.v-lose{background:#fde2df;color:#a32a1f}.v-even{background:#eef1f5;color:#3b4250}
+.picker{position:relative}
+.dd{position:absolute;z-index:30;background:#fff;border:1px solid #cfd4dc;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:280px;overflow:auto;width:100%;margin-top:2px}
+.dd div{padding:7px 10px;cursor:pointer;font-size:13px}
+.dd div:hover{background:#f3f5f8}
+.slot{display:flex;justify-content:space-between;align-items:center;background:#f7f8fa;border:1px solid var(--line);border-radius:7px;padding:6px 10px;margin:5px 0;font-size:13px}
+.empty{color:var(--mute);font-size:13px;padding:14px;text-align:center;border:1px dashed #cfd4dc;border-radius:8px}
+.note{background:#f2f6fd;border:1px solid #d7e3f8;color:#1f3c6e;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px}
+.warnnote{background:#fff8ec;border-color:#f3dcae;color:#6b4a0f}
+.modal{position:fixed;inset:0;background:rgba(10,14,20,.5);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:40px 12px;overflow:auto}
+.modal.on{display:flex}
+.modal .card{max-width:760px;width:100%}
+.board{font-size:11.5px}
+.board td{text-align:left;padding:4px 6px;border:1px solid #eef0f3;min-width:92px}
+.board td.me{background:#fff3ea}
+.board td.now{outline:2px solid var(--acc)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#1d5fd1}
+.dot.inj{background:#e9b8b2}
+.day.today{background:#fff3ea}
+.mono{font-family:"JetBrains Mono",monospace;font-size:12px}
+footer{max-width:1280px;margin:0 auto;padding:4px 18px 30px;color:var(--mute);font-size:12px}
+footer a{color:var(--mute)}
+a{color:var(--acc2)}
+.hide{display:none!important}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i style="background:#f2efe6;box-shadow:inset 0 0 0 2px #c0392b"></i>Courtside HQ</div>
+  <div class="sport"><a class="pill" href="index.html" style="text-decoration:none">NBA</a><a class="pill" href="football.html" style="text-decoration:none">NFL</a><button class="pill on">MLB</button></div>
+  <div class="stamp" id="stamp">Baseball rankings and mock drafts arrive before January</div>
+</header>
+<nav id="nav">
+  <button data-t="win" class="on">🏆 League Winners</button>
+</nav>
+<main>
+  <section id="t-win"></section>
+</main>
+<footer id="foot"><div>Values use 5x5 roto scoring (R, HR, RBI, SB, AVG / W, SV, K, ERA, WHIP) in a 12-team league. Refreshed nightly.</div></footer>
+<script src="winners.js"></script>
+<script>"use strict";window.renderWinners(document.getElementById('t-win'),'mlb');</script>
+</body>
+</html>

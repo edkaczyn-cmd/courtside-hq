@@ -95,7 +95,7 @@ a{color:var(--acc2)}
 <body>
 <header>
   <div class="brand"><i style="background:#7a4a24"></i>Courtside HQ</div>
-  <div class="sport"><a class="pill" href="index.html" style="text-decoration:none">NBA</a><button class="pill on">NFL</button><button class="pill" disabled title="Baseball rankings and mock drafts arrive before January">MLB · Jan</button></div>
+  <div class="sport"><a class="pill" href="index.html" style="text-decoration:none">NBA</a><button class="pill on">NFL</button><a class="pill" href="baseball.html" style="text-decoration:none" title="League-winner research now; rankings and mock drafts arrive before January">MLB</a></div>
   <div class="stamp" id="stamp">Loading data…</div>
 </header>
 <nav id="nav">
@@ -104,6 +104,7 @@ a{color:var(--acc2)}
   <button data-t="moves">Buy / Sell &amp; Waivers</button>
   <button data-t="guil" id="nav-guil" class="hide">🪓 Chop Watch</button>
   <button data-t="week">My Week</button>
+  <button data-t="win">🏆 League Winners</button>
   <button data-t="draft">Mock Draft</button>
   <button data-t="league">League Setup</button>
 </nav>
@@ -115,11 +116,13 @@ a{color:var(--acc2)}
   <section id="t-moves" class="hide"></section>
   <section id="t-guil" class="hide"></section>
   <section id="t-week" class="hide"></section>
+  <section id="t-win" class="hide"></section>
   <section id="t-draft" class="hide"></section>
   <section id="t-league" class="hide"></section>
 </main>
 <footer id="foot"></footer>
 <div class="modal" id="modal"><div class="card" id="mcard"></div></div>
+<script src="winners.js"></script>
 <script>
 "use strict";
 /* ---------- helpers ---------- */
@@ -633,7 +636,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 document.addEventListener('click',e=>{const pn=e.target.closest('.pn');if(pn&&pn.dataset.p!=null)openPlayer(+pn.dataset.p)});
 
 /* ---------- shell ---------- */
-const RENDER={rank:renderRank,trade:renderTrade,moves:renderMoves,guil:renderGuil,week:renderWeek,draft:renderDraft,league:renderLeague};
+const RENDER={rank:renderRank,trade:renderTrade,moves:renderMoves,guil:renderGuil,week:renderWeek,win:()=>window.renderWinners($('#t-win'),'nfl'),draft:renderDraft,league:renderLeague};
 let TAB='rank';
 function show(t){if(t==='guil'&&!isGuil())t='rank';$('#nav-guil').classList.toggle('hide',!isGuil());TAB=t;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));Object.keys(RENDER).forEach(k=>$('#t-'+k).classList.toggle('hide',k!==t));RENDER[t]();try{history.replaceState(null,'','#'+t)}catch(e){}window.scrollTo(0,0)}
 function renderAll(){RENDER[TAB]()}

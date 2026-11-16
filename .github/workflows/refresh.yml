@@ -15,7 +15,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,9 +28,12 @@ jobs:
       - name: Football data
         run: python scripts/refresh_nfl.py
         continue-on-error: true
+      - name: League-winner research (all sports)
+        run: python scripts/refresh_winners.py
+        continue-on-error: true
       - name: Commit updated data
         run: |
           git config user.name "courtside-bot"
           git config user.email "courtside-bot@users.noreply.github.com"
-          git add data/nba.json data/nfl.json
+          git add data/nba.json data/nfl.json data/winners_*.json
           git diff --cached --quiet && echo "No changes" || (git commit -m "Data refresh $(date -u +%Y-%m-%d)" && git push)
