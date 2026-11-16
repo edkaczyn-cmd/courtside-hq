@@ -121,7 +121,7 @@ a{color:var(--acc2)}
 <footer id="foot"></footer>
 <div class="modal" id="modal"><div class="card" id="mcard"></div></div>
 
-<script src="winners.js?v=7"></script>
+<script src="winners.js?v=8"></script>
 <script>
 "use strict";
 /* ---------- constants & helpers ---------- */
@@ -546,7 +546,7 @@ function syncNames(){L.teams.forEach(t=>t.names=(t.ids||[]).map(id=>P[id].n))}
 
 /* ---------- persistence ---------- */
 const STORE={mode:'local',db:null,uid:null};
-function serial(){return {name:L.name,size:L.size,roster:L.roster,slots:L.slots,cats:L.cats,punts:L.punts,my:L.my,teams:L.teams.map(t=>({name:t.name,names:(t.ids||[]).map(id=>P[id].n)}))}}
+function serial(){return {name:L.name,format:L.format,size:L.size,roster:L.roster,slots:L.slots,cats:L.cats,punts:L.punts,my:L.my,teams:L.teams.map(t=>({name:t.name,names:(t.ids||[]).map(id=>P[id].n)}))}}
 function hydrate(o){ if(!o) return; L=Object.assign(JSON.parse(JSON.stringify(DEFAULT_LEAGUE)),o); L.teams=(o.teams||[]).map(t=>({name:t.name,ids:(t.names||[]).map(n=>BYKEY[norm(n)]||BYABBR[norm(n)]).filter(Boolean).map(p=>p.id)})); L.cats=(L.cats||ALLCATS).filter(c=>CATS[c]); L.punts=(L.punts||[]).filter(c=>L.cats.includes(c)); }
 let LEAGUES={active:null,list:{}};
 const newId=()=>'lg'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -596,6 +596,8 @@ function winOwner(name){const p=BYKEY[norm(name)];const o=p?OWN[p.id]:null;
   if(o!=null) return o===L.my?{s:'mine',label:'Your team'}:{s:'team',label:(L.teams[o]&&L.teams[o].name)||'Another team'};
   return fullLeague()?{s:'fa',label:'Free agent'}:{s:'unk',label:'Not on loaded rosters'};}
 winOwner.status=()=>({loaded:leagueLoaded(),full:fullLeague(),league:L.name||'your league'});
+winOwner.format=()=>L.format||(/dynasty/i.test(L.name||'')?'dynasty':'redraft');
+winOwner.setFormat=v=>{L.format=v;save();};
 const RENDER={rank:renderRank,trade:renderTrade,moves:renderMoves,week:renderWeek,win:()=>window.renderWinners($('#t-win'),'nba',winOwner),draft:renderDraft,league:renderLeague};
 function show(t){V.tab=t; document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); Object.keys(RENDER).forEach(k=>$('#t-'+k).classList.toggle('hide',k!==t)); RENDER[t](); if(location.hash.slice(1)!==t){try{history.replaceState(null,'','#'+t)}catch(e){}} window.scrollTo(0,0);}
 function renderAll(){RENDER[V.tab]()}

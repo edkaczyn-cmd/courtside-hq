@@ -79,8 +79,8 @@
       <div>${traits}</div></div>${usage}</div>`;
   }
 
-  function targets(d, sport) {
-    const t = d.targets;
+  function targets(d, sport, override) {
+    const t = override || d.targets;
     if (!t || !t.rows) return '';
     const st = STATE[sport];
     const poss = [...new Set(t.rows.map(r => r.kind ? (r.kind === 'H' ? 'Hitters' : 'Pitchers') : r.pos.split('/')[0]))];
@@ -88,19 +88,43 @@
     t.rows.forEach(r => { r._own = hasOwn ? OWNER[sport](r.n) : null; });
     const rows = t.rows.filter(r => (st.tpos === 'ALL' || (r.kind ? (r.kind === 'H' ? 'Hitters' : 'Pitchers') : r.pos.split('/')[0]) === st.tpos) && ownOk(r, hasOwn ? st.own : 'all'));
     const cols = d.cols.filter(c => c.k !== 'profit');
+    const hasNxt = t.rows.some(r => r.nxt != null);
     return `<div class="card"><div class="sec-h"><h2>🎯 ${e(t.label)}</h2>
       <div class="bar" style="margin:0">${hasOwn ? `<label>Owner<select id="lw-own"><option value="all">Everyone</option><option value="avail" ${st.own === 'avail' ? 'selected' : ''}>Free agents</option><option value="mine" ${st.own === 'mine' ? 'selected' : ''}>On my team</option><option value="others" ${st.own === 'others' ? 'selected' : ''}>On other teams</option></select></label>` : ''}
       <label>Position<select id="lw-tpos">${['ALL', ...poss].map(p => `<option ${p === st.tpos ? 'selected' : ''}>${e(p)}</option>`).join('')}</select></label></div></div>
-      <p class="sub">This season's players scored against the traits past league winners shared. Every player here should still be cheap next year and shows at least three of the other traits.</p>
+      <p class="sub">${e(t.intro || "This season's players scored against the traits past league winners shared. Every player here should still be cheap next year and shows at least three of the other traits.")}</p>
       ${ownNote(sport)}
       <div class="lw-legend">${t.checks.map(c => `<div${c.warn ? ' style="background:#fff8ec;border-color:#f3dcae"' : ''}><b>${c.warn ? '⚠ ' : ''}${e(c.label)}</b>${e(c.desc)}</div>`).join('')}</div>
-      ${rows.length ? `<div class="tw"><table><thead><tr><th class="l">Player</th>${hasOwn ? '<th class="l">Owner</th>' : ''}${head(cols)}<th title="Where he should go in next year's 12-team drafts (round.pick), estimated from this year's draft position and his finish. The market prices in a breakout, so the finish counts more.">Est. next-year pick</th>${t.checks.map(c => `<th title="${e(c.desc)}">${e(c.label.split(' (')[0])}</th>`).join('')}</tr></thead><tbody>
-        ${rows.map(r => `<tr>${nameCell(r)}${hasOwn ? ownCell(r) : ''}${cols.map(c => cell(c, r)).join('')}<td title="About pick ${fmt(r.nxt, '0')}">${rp(r.nxt)}</td>${t.checks.map(c => c.warn
+      ${rows.length ? `<div class="tw"><table><thead><tr><th class="l">Player</th>${hasOwn ? '<th class="l">Owner</th>' : ''}${head(cols)}${hasNxt ? `<th title="Where he should go in next year's 12-team drafts (round.pick), estimated from this year's draft position and his finish. The market prices in a breakout, so the finish counts more.">Est. next-year pick</th>` : ''}${t.checks.map(c => `<th title="${e(c.desc)}">${e(c.label.split(' (')[0])}</th>`).join('')}</tr></thead><tbody>
+        ${rows.map(r => `<tr>${nameCell(r)}${hasOwn ? ownCell(r) : ''}${cols.map(c => cell(c, r)).join('')}${hasNxt ? `<td title="About pick ${fmt(r.nxt, '0')}">${rp(r.nxt)}</td>` : ''}${t.checks.map(c => c.warn
           ? `<td style="text-align:center" title="${e(r.rbshare || '')}">${r.checks[c.k] ? '<span class="lw-ck w">⚠</span>' : (r.pos === 'RB' ? '<span class="lw-ck n">·</span>' : '')}</td>`
           : `<td style="text-align:center"><span class="lw-ck ${r.checks[c.k] ? 'y' : 'n'}">${r.checks[c.k] ? '✓' : '·'}</span></td>`).join('')}</tr>`).join('')}
       </tbody></table></div>` : `<div class="empty">${hasOwn && st.own !== 'all' ? 'No targets match this owner filter.' : 'No players match enough traits yet.'}</div>`}
       ${(t.excluded || []).length ? `<details style="margin-top:10px"><summary class="meta" style="cursor:pointer;margin:0">Big workloads not counted: fill-in roles (${t.excluded.length})</summary>
         <div class="list" style="margin-top:6px">${t.excluded.map(x => `<div class="it"><b>${e(x.n)}</b><span class="meta">${e(x.pos)} · ${e(x.t)}</span><div class="why">${e(x.why)}</div></div>`).join('')}</div></details>` : ''}</div>`;
+  }
+
+  function sells(d, sport) {
+    const sl = d.dynasty && d.dynasty.sells;
+    if (!sl) return '';
+    const hasOwn = !!(OWNER[sport] && OWNER[sport].status && OWNER[sport].status().loaded);
+    sl.rows.forEach(r => { r._own = hasOwn ? OWNER[sport](r.n) : null; });
+    return `<div class="card"><div class="sec-h"><h2>📉 ${e(sl.label)}</h2></div><p class="sub">${e(sl.desc)}</p>
+      ${sl.rows.length ? `<div class="tw"><table><thead><tr><th class="l">Player</th>${hasOwn ? '<th class="l">Owner</th>' : ''}<th class="l">Pos</th><th>Age</th><th title="This season's ADP">Cost</th><th title="Per-game value rank this season">Finish</th><th>MPG</th><th>Δ MPG</th></tr></thead><tbody>
+        ${sl.rows.map(r => `<tr>${nameCell(r)}${hasOwn ? ownCell(r) : ''}<td class="l">${e(r.pos)}</td><td><b>${fmt(r.age, '1')}</b></td><td>${r.cost == null ? 'UD' : fmt(r.cost, '0')}</td><td>${fmt(r.fin, '0')}</td><td>${fmt(r.mpg, '1')}</td><td>${fmt(r.dmin, '+1')}</td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="empty">No productive 30+ players right now.</div>'}</div>`;
+  }
+
+  function formatBar(d, sport, fmtNow) {
+    const fn = OWNER[sport];
+    if (!d.dynasty || !fn || !fn.format) return '';
+    const lg = fn.status ? fn.status().league : 'this league';
+    return `<div class="card" style="padding:10px 14px"><div class="bar" style="margin:0;align-items:center">
+      <label style="flex-direction:row;align-items:center;gap:8px">League format for <b style="color:var(--ink)">${e(lg)}</b>
+      <select id="lw-fmt"><option value="redraft" ${fmtNow !== 'dynasty' ? 'selected' : ''}>Redraft</option><option value="dynasty" ${fmtNow === 'dynasty' ? 'selected' : ''}>Dynasty</option></select></label>
+      <span class="meta" style="margin:0">${fmtNow === 'dynasty'
+        ? 'Dynasty view: favors young players with growing roles and flags productive veterans to sell before they decline.'
+        : 'Redraft view: one-season value against this year\'s draft cost.'}</span></div></div>`;
   }
 
   function seasons(d, sport) {
@@ -134,11 +158,17 @@
     const d = CACHE[sport], st = STATE[sport];
     if (!st.season) st.season = d.seasons[0] && d.seasons[0].key;
     const up = new Date(d.updated);
-    el.innerHTML = anatomy(d) + targets(d, sport) + seasons(d, sport) +
+    const fmtNow = OWNER[sport] && OWNER[sport].format ? OWNER[sport].format() : 'redraft';
+    const dyn = fmtNow === 'dynasty' && d.dynasty;
+    const dynNote = dyn && d.dynasty.summary ? `<div class="note">${e(d.dynasty.summary)} Dynasty pays for youth: buy the role growth early, sell veterans a year early.</div>` : '';
+    el.innerHTML = formatBar(d, sport, fmtNow) + anatomy(d) + dynNote +
+      (dyn ? targets(d, sport, Object.assign({ intro: 'Players 24½ or younger whose role is growing. Unlike redraft, current cost matters less than the years of production ahead.' }, d.dynasty.targets)) + sells(d, sport) : targets(d, sport)) +
+      seasons(d, sport) +
       `<p class="sub">Sources: ${e(d.sources)}. Updated ${up.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}. Same philosophy as the "Anatomy of a League Winner" research; the picks here come from this tool's own data.</p>`;
     const on = (id, fn) => { const x = el.querySelector('#' + id); if (x) x.onchange = ev => { fn(ev.target.value); renderWinners(el, sport); }; };
     on('lw-tpos', v => st.tpos = v);
     on('lw-own', v => st.own = v);
+    on('lw-fmt', v => { if (OWNER[sport] && OWNER[sport].setFormat) OWNER[sport].setFormat(v); st.tpos = 'ALL'; });
     on('lw-season', v => st.season = v);
     on('lw-view', v => st.view = v === 'busts' ? 'busts' : 'win');
   }

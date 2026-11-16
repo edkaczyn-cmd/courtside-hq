@@ -513,6 +513,34 @@ NBA_POS = {0: "PG", 1: "SG", 2: "SF", 3: "PF", 4: "C"}
 NBA_BANDS = [(1, 36, "Rounds 1-3"), (37, 72, "Rounds 4-6"), (73, 120, "Rounds 7-10"), (121, 9999, "Round 11+ / undrafted")]
 
 
+def nba_bio():
+    """ESPN athlete id -> (date of birth, years of NBA experience), from the 30 team rosters."""
+    out = {}
+    for tid in range(1, 31):
+        try:
+            j = json.loads(get_text(f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{tid}/roster",
+                                    f"espn_nba_roster_{tid}.json", timeout=40))
+        except Exception as e:  # noqa: BLE001
+            log("  NBA roster", tid, "failed:", e)
+            continue
+        ath = j.get("athletes") or []
+        if ath and isinstance(ath[0], dict) and "items" in ath[0]:      # grouped by position on some endpoints
+            ath = [a for grp in ath for a in grp.get("items", [])]
+        for a in ath:
+            try:
+                dob = dt.date.fromisoformat(str(a.get("dateOfBirth", ""))[:10]) if a.get("dateOfBirth") else None
+            except ValueError:
+                dob = None
+            exp = (a.get("experience") or {}).get("years")
+            out[int(a["id"])] = (dob, exp)
+    log("  NBA bios:", len(out), "players with birth dates" if out else "(none: ages unavailable)")
+    return out
+
+
+def age_on(dob, day):
+    return round((day - dob).days / 365.25, 1) if dob else None
+
+
 def nba_rows(season):
     ps = espn("fba", season, "STANDARD", 500)
     rows = []
@@ -566,11 +594,17 @@ def nba():
             log("  NBA", s, len(data[s]), "players")
         except Exception as e:  # noqa: BLE001
             log("  NBA", s, "failed:", e)
+    bio = {}
+    try:
+        bio = nba_bio()
+    except Exception as e:  # noqa: BLE001
+        log("  NBA bios failed:", e)
     out_seasons, all_w, all_pool = [], [], []
     for s in done + [cur]:
         if s not in data:
             continue
         prev = {r["id"]: r for r in data.get(s - 1, [])}
+        start = dt.date(s - 1, 10, 21)
         real_adp = sum(1 for r in data[s] if r["adp"] and r["adp"] < 130) > 50
         rows = []
         for r in data[s]:
@@ -584,7 +618,9 @@ def nba():
                              gp=int(r["gp"]), mpg=r1(r["mpg"]), usg=r1(r["usg"]), vpg=r1(r["vpg"], 2),
                              mpg_prev=r1(pv["mpg"]) if pv and pv["gp"] >= 10 else None,
                              usg_prev=r1(pv["usg"]) if pv and pv["gp"] >= 10 else None,
-                             gp_prev=int(pv["gp"]) if pv else None))
+                             gp_prev=int(pv["gp"]) if pv else None,
+                             age=age_on(bio.get(r["id"], (None, None))[0], start),
+                             exp=bio.get(r["id"], (None, None))[1]))
         for r in rows:
             r["dmin"] = r1(r["mpg"] - r["mpg_prev"]) if r["mpg"] is not None and r["mpg_prev"] is not None else None
             r["dusg"] = r1(r["usg"] - r["usg_prev"]) if r["usg"] is not None and r["usg_prev"] is not None else None
@@ -607,7 +643,8 @@ def nba():
         log("  NBA", s, "winners:", ", ".join(r["n"] for r in w[:6]))
 
     bands = band_table(all_w, all_pool, NBA_BANDS)
-    traits = trait_rows(all_w, all_pool, [("dmin", "Minutes per game, change from prior season", "1", "hi"),
+    traits = trait_rows(all_w, all_pool, [("age", "Age at season start", "1", "lo"),
+                                          ("dmin", "Minutes per game, change from prior season", "1", "hi"),
                                           ("dusg", "Usage per 36 (shots + FTs + TOs), change from prior season", "1", "hi"),
                                           ("mpg", "Minutes per game", "1", "hi"), ("usg", "Usage per 36", "1", "hi"),
                                           ("gp", "Games played", "0", "hi"), ("rd", "Draft round", "0", "hi")])
@@ -644,6 +681,43 @@ def nba():
                                dict(k="cheap", label="Should still be cheap (round 7+)",
                                     desc="Next year's price, estimated from this year's ADP and his finish so far, is round 7 or later.")],
                        rows=cand[:30])
+    dynasty = None
+    if cur in data and any(r.get("age") is not None for r in cur_rows):
+        today = NOW.date()
+        for r in cur_rows:
+            r["age_now"] = r["age"]
+        young_cut = 24.5
+        dt_rows = []
+        for r in cur_rows:
+            if r["gp"] < 5 or r.get("age") is None or r["mpg"] is None:
+                continue
+            rookie = r.get("exp") == 0 or r["mpg_prev"] is None
+            checks = {
+                "young": r["age"] <= young_cut,
+                "minutes": (r["dmin"] is not None and r["dmin"] >= 2) or (rookie and r["mpg"] >= 24),
+                "usage": r["dusg"] is not None and r["dusg"] >= 1.0,
+                "producing": r["fin"] <= 150,
+                "unpriced": r["cost"] is None or r["cost"] >= 60,
+            }
+            if checks["young"] and (checks["producing"] or checks["minutes"]) and sum(checks.values()) >= 4:
+                score = sum(checks.values()) + max(0.0, min(1.0, (r["vpg"] or 0) / 5)) + max(0.0, (young_cut - r["age"]) / 10)
+                dt_rows.append(dict(r, checks=checks, score=round(score, 2), rookie=rookie))
+        dt_rows.sort(key=lambda x: -x["score"])
+        sells = sorted([dict(r) for r in cur_rows if r.get("age") is not None and r["age"] >= 30 and r["gp"] >= 5 and r["fin"] <= 72],
+                       key=lambda r: (-r["age"], r["fin"]))
+        yw = [r for r in all_w if r.get("age") is not None]
+        dynasty = dict(
+            targets=dict(label="Dynasty targets: young players with growing roles", season=cur,
+                         checks=[dict(k="young", label=f"Age {young_cut:g} or younger", desc="Years of prime ahead: the dynasty premium."),
+                                 dict(k="minutes", label="Minutes up 2+ (or a rookie playing 24+)", desc="The role is growing, the most common league-winner trait."),
+                                 dict(k="usage", label="Usage up 1+ per 36", desc="More shots, free throws and ball-handling than last season."),
+                                 dict(k="producing", label="Top-150 per game now", desc="Already producing at a rosterable level."),
+                                 dict(k="unpriced", label="Not priced as a star (ADP 60+)", desc="This year's market didn't treat him as a core piece, so trade cost may still be reasonable.")],
+                         rows=dt_rows[:25]),
+            sells=dict(label="Sell window: productive players 30 and older", rows=sells[:15],
+                       desc="Top-72 per-game value right now, age 30+. In dynasty their value falls fastest from here: trade them while they're still producing if you're not chasing this year's title."),
+            summary=(f"{sum(1 for r in yw if r['age'] <= 25)} of {len(yw)} past league winners were 25 or younger at the start of the season."
+                     if yw else None))
     late = sum(b["winners"] for b in bands[2:])
     summary = [
         f"{late} of {len(all_w)} league winners ({round(100 * late / max(1, len(all_w)))}%) came from round 7 or later, or went undrafted.",
@@ -654,13 +728,14 @@ def nba():
     return dict(sport="nba", updated=NOW.isoformat(timespec="seconds"),
                 intro="League winners are the players whose 9-category value beat their draft cost by the most (12 teams, season totals, so games played count). A draft slot is worth what the player who finished in that slot produced. The season in progress is judged per game.",
                 anatomy=dict(span=f"{done[0] - 1}-{str(done[-1])[2:]}", n=len(all_w), summary=summary, bands=bands, traits=traits),
-                seasons=out_seasons[::-1], targets=targets,
+                seasons=out_seasons[::-1], targets=targets, dynasty=dynasty,
                 cols=[dict(k="pos", label="Pos"), dict(k="cost", label="Cost", fmt="0", tip="ADP, or ESPN preseason rank where ADP isn't kept"),
+                      dict(k="age", label="Age", fmt="1"),
                       dict(k="fin", label="Finish", fmt="0"), dict(k="gp", label="GP", fmt="0"), dict(k="mpg", label="MPG", fmt="1"),
                       dict(k="dmin", label="Δ MPG", fmt="+1", tip="Minutes per game vs prior season"),
                       dict(k="usg", label="Usage", fmt="1", tip="(FGA + 0.44×FTA + TO) per 36 minutes"),
                       dict(k="profit", label="Profit", fmt="1", tip="9-cat value above what that draft slot normally returns")],
-                sources="ESPN fantasy (ADP, preseason ranks, season stats)")
+                sources="ESPN fantasy (ADP, preseason ranks, season stats) · ESPN team rosters (ages)")
 
 
 # =============================================================== MLB
