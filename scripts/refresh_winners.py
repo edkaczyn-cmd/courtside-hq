@@ -223,6 +223,8 @@ def nfl_season(season):
     team_car = wk.groupby(["team", "week"]).carries.sum()
     wk["tm_tgt"] = [team_tgt.get((t, w), 0) for t, w in zip(wk.team, wk.week)]
     wk["tm_car"] = [team_car.get((t, w), 0) for t, w in zip(wk.team, wk.week)]
+    team_rbcar = wk[wk.position == "RB"].groupby(["team", "week"]).carries.sum()
+    wk["tm_rbcar"] = [team_rbcar.get((t, w), 0) for t, w in zip(wk.team, wk.week)]
     last_wk = int(wk.week.max())
     team_weeks = {t: sorted(x.week.unique().tolist()) for t, x in wk.groupby("team")}
     out = {}
@@ -246,7 +248,8 @@ def nfl_season(season):
             rec=g.receptions.fillna(0).sum(), ryd=g.rushing_yards.fillna(0).sum(), recyd=g.receiving_yards.fillna(0).sum(),
             rtd=g.rushing_tds.fillna(0).sum(), rectd=g.receiving_tds.fillna(0).sum(),
             wk={int(w): (tm, float(c or 0) + float(t or 0)) for w, tm, c, t in zip(g.week, g.team, g.carries.fillna(0), g.targets.fillna(0))},
-            l4n=len(l4), team_last=team_weeks.get(r.team, [])[-4:])
+            l4n=len(l4), team_last=team_weeks.get(r.team, [])[-4:],
+            rbw={int(w): (tm, float(c or 0), float(tc or 0)) for w, tm, c, tc in zip(g.week, g.team, g.carries.fillna(0), g.tm_rbcar)})
     return out, last_wk
 
 
@@ -427,6 +430,18 @@ def nfl():
                 ub = use_by_pos[pos]
                 need = ub["winners"] if ub["winners"] is not None else 0
                 exp_td = (p["car"] * td_rate[pos][0] + p["tgt"] * td_rate[pos][1]) if pos in td_rate else None
+                # backfield split (RBs): his share of the team's RB carries in recent games vs earlier
+                shares, split_txt = False, None
+                if pos == "RB":
+                    mine = {w: v for w, v in p["rbw"].items() if v[0] == p["t"]}
+                    rec_w = [w for w in mine if w in p["team_last"]]
+                    old_w = [w for w in mine if w not in p["team_last"]]
+                    sh = lambda ws: (sum(mine[w][1] for w in ws) / max(1.0, sum(mine[w][2] for w in ws))) if ws else None
+                    s_rec, s_old = sh(rec_w), sh(old_w)
+                    if s_rec is not None:
+                        shares = s_rec < 0.60 or (s_old is not None and s_old - s_rec >= 0.10)
+                        split_txt = f"{round(100 * s_rec)}% of RB carries lately" + (f" (was {round(100 * s_old)}%)" if s_old is not None else "")
+                r["rbshare"] = split_txt
                 checks = {
                     "young": r["age"] is not None and r["age"] <= age_cut,
                     # a workload that only existed while the drafted starter was out doesn't count
@@ -439,8 +454,9 @@ def nfl():
                 }
                 if pos == "QB":
                     checks["unlucky"] = False
-                score = sum(checks.values()) + min(1.0, max(0.0, (r["use"] or 0) / max(1, need * 1.5)))
-                if sum(checks.values()) >= 3 and checks["role"] and checks["cheap"]:
+                score = sum(checks.values()) + min(1.0, max(0.0, (r["use"] or 0) / max(1, need * 1.5))) - (0.75 if shares else 0)
+                checks["shares"] = shares            # warning, not a plus: not counted toward the 3 traits
+                if sum(v for k, v in checks.items() if k != "shares") >= 3 and checks["role"] and checks["cheap"]:
                     cand.append(dict({k: v for k, v in r.items() if k != "_p"}, checks=checks, score=round(score, 2),
                                      exp_td=r1(exp_td), nxt=r1(next_cost(r), 0)))
             cand.sort(key=lambda x: -x["score"])
@@ -454,7 +470,9 @@ def nfl():
                                    dict(k="cheap", label="Should still be cheap (round 7+)",
                                         desc="Next year's price, estimated from this year's ADP and finish, is round 7 or later: where 3 of 4 past league winners came from."),
                                    dict(k="unlucky", label="Touchdowns below his volume",
-                                        desc="Scored fewer TDs than his touches usually produce, so his points undersell the role.")],
+                                        desc="Scored fewer TDs than his touches usually produce, so his points undersell the role."),
+                                   dict(k="shares", label="Shares the backfield", warn=True,
+                                        desc="Warning (RBs): under 60% of his team's RB carries in its last 4 games, or down 10+ points from earlier in the season.")],
                            rows=cand[:30], excluded=excluded)
             log("  NFL targets:", ", ".join(x["n"] for x in cand[:8]))
         except Exception as e:  # noqa: BLE001

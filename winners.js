@@ -22,7 +22,7 @@
   .lw-sum{margin:6px 0 4px 0;padding-left:18px}
   .lw-sum li{margin:3px 0}
   .lw-ck{display:inline-block;width:18px;text-align:center;font-weight:700}
-  .lw-ck.y{color:var(--good)} .lw-ck.n{color:#c5cad3}
+  .lw-ck.y{color:var(--good)} .lw-ck.n{color:#c5cad3} .lw-ck.w{color:var(--warn)}
   .lw-legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;margin:4px 0 12px}
   .lw-legend div{background:#f7f8fa;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px}
   .lw-legend b{display:block;margin-bottom:2px}
@@ -72,9 +72,11 @@
     return `<div class="card"><div class="sec-h"><h2>🎯 ${e(t.label)}</h2>
       <label class="meta">Show <select id="lw-tpos">${['ALL', ...poss].map(p => `<option ${p === st.tpos ? 'selected' : ''}>${e(p)}</option>`).join('')}</select></label></div>
       <p class="sub">This season's players scored against the traits past league winners shared. Every player here passes the cost check and at least three traits in all, so the list favors players you can still get at a discount.</p>
-      <div class="lw-legend">${t.checks.map(c => `<div><b>${e(c.label)}</b>${e(c.desc)}</div>`).join('')}</div>
+      <div class="lw-legend">${t.checks.map(c => `<div${c.warn ? ' style="background:#fff8ec;border-color:#f3dcae"' : ''}><b>${c.warn ? '⚠ ' : ''}${e(c.label)}</b>${e(c.desc)}</div>`).join('')}</div>
       ${rows.length ? `<div class="tw"><table><thead><tr><th class="l">Player</th>${head(cols)}<th title="Where he should go in next year's 12-team drafts (round.pick), estimated from this year's draft position and his finish. The market prices in a breakout, so the finish counts more.">Est. next-year pick</th>${t.checks.map(c => `<th title="${e(c.desc)}">${e(c.label.split(' (')[0])}</th>`).join('')}</tr></thead><tbody>
-        ${rows.map(r => `<tr>${nameCell(r)}${cols.map(c => cell(c, r)).join('')}<td title="About pick ${fmt(r.nxt, '0')}">${rp(r.nxt)}</td>${t.checks.map(c => `<td style="text-align:center"><span class="lw-ck ${r.checks[c.k] ? 'y' : 'n'}">${r.checks[c.k] ? '✓' : '·'}</span></td>`).join('')}</tr>`).join('')}
+        ${rows.map(r => `<tr>${nameCell(r)}${cols.map(c => cell(c, r)).join('')}<td title="About pick ${fmt(r.nxt, '0')}">${rp(r.nxt)}</td>${t.checks.map(c => c.warn
+          ? `<td style="text-align:center" title="${e(r.rbshare || '')}">${r.checks[c.k] ? '<span class="lw-ck w">⚠</span>' : (r.pos === 'RB' ? '<span class="lw-ck n">·</span>' : '')}</td>`
+          : `<td style="text-align:center"><span class="lw-ck ${r.checks[c.k] ? 'y' : 'n'}">${r.checks[c.k] ? '✓' : '·'}</span></td>`).join('')}</tr>`).join('')}
       </tbody></table></div>` : '<div class="empty">No players match enough traits yet.</div>'}
       ${(t.excluded || []).length ? `<details style="margin-top:10px"><summary class="meta" style="cursor:pointer;margin:0">Big workloads not counted: fill-in roles (${t.excluded.length})</summary>
         <div class="list" style="margin-top:6px">${t.excluded.map(x => `<div class="it"><b>${e(x.n)}</b><span class="meta">${e(x.pos)} · ${e(x.t)}</span><div class="why">${e(x.why)}</div></div>`).join('')}</div></details>` : ''}</div>`;
