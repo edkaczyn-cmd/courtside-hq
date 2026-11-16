@@ -1,36 +1,32 @@
-"""One-off check of which draft-position and stats sources answer from GitHub's servers."""
 import json, requests
 H = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"}
-def show(name, url, headers=None, params=None, n=600):
-    try:
-        r = requests.get(url, headers={**H, **(headers or {})}, params=params, timeout=40)
-        print(f"== {name}: HTTP {r.status_code}, {len(r.content)} bytes")
-        print(r.text[:n].replace("\n", " "))
-    except Exception as e:
-        print(f"== {name}: FAILED {e}")
-def espn(game, season, sort):
-    f = {"players": {"limit": 3, "sortDraftRanks": {"sortPriority": 100, "sortAsc": True, "value": sort}}}
+def espn_raw(game, season, sort, n=2, extra=None):
+    f = {"players": {"limit": n, "sortDraftRanks": {"sortPriority": 100, "sortAsc": True, "value": sort}}}
+    if extra: f["players"].update(extra)
     url = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/{game}/seasons/{season}/segments/0/leaguedefaults/3"
-    try:
-        r = requests.get(url, params={"view": "kona_player_info"}, headers={**H, "X-Fantasy-Filter": json.dumps(f)}, timeout=40)
-        print(f"== ESPN {game} {season}: HTTP {r.status_code}, {len(r.content)} bytes")
-        j = r.json()
-        for p in j.get("players", [])[:3]:
-            pl = p.get("player", {})
-            own = pl.get("ownership", {})
-            st = [(s.get("seasonId"), s.get("statSourceId"), s.get("statSplitTypeId"), round(s.get("appliedTotal", 0), 1), list((s.get("stats") or {}).items())[:12]) for s in pl.get("stats", [])][:4]
-            print(" ", pl.get("fullName"), pl.get("defaultPositionId"), "ADP", own.get("averageDraftPosition"), "auction", own.get("auctionValueAverage"), "rank", pl.get("draftRanksByRankType", {}).get(sort, {}).get("rank"))
-            print("   stats:", st)
-    except Exception as e:
-        print(f"== ESPN {game} {season}: FAILED {e}")
-espn("ffl", 2025, "PPR"); espn("ffl", 2026, "PPR"); espn("ffl", 2024, "PPR")
-espn("fba", 2026, "STANDARD"); espn("fba", 2027, "STANDARD"); espn("fba", 2025, "STANDARD")
-espn("flb", 2026, "STANDARD"); espn("flb", 2025, "STANDARD")
-show("FFC ADP 2025", "https://fantasyfootballcalculator.com/api/v1/adp/half-ppr", params={"teams": 12, "year": 2025, "position": "all"})
-show("FFC ADP 2026", "https://fantasyfootballcalculator.com/api/v1/adp/half-ppr", params={"teams": 12, "year": 2026, "position": "all"})
-show("MLB statsapi hitting", "https://statsapi.mlb.com/api/v1/stats", params={"stats": "season", "group": "hitting", "season": 2026, "sportId": 1, "limit": 2, "playerPool": "ALL"})
-show("Savant expected batters", "https://baseballsavant.mlb.com/leaderboard/expected_statistics", params={"type": "batter", "year": 2026, "position": "", "team": "", "min": "q", "csv": "true"})
-show("Savant statcast batters", "https://baseballsavant.mlb.com/leaderboard/custom", params={"year": 2026, "type": "batter", "min": "q", "selections": "pa,barrel_batted_rate,hard_hit_percent,xwoba,woba", "csv": "true"})
-show("Hashtag NBA ADP", "https://hashtagbasketball.com/fantasy-basketball-adp", n=300)
-show("nflverse 2025 stats", "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2025.csv", n=300)
-show("nflverse 2025 snaps", "https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_2025.csv", n=200)
+    r = requests.get(url, params={"view": "kona_player_info"}, headers={**H, "X-Fantasy-Filter": json.dumps(f)}, timeout=60)
+    return r.json().get("players", [])
+for game, season, sort in [("fba", 2026, "STANDARD"), ("flb", 2026, "STANDARD"), ("ffl", 2025, "PPR")]:
+    ps = espn_raw(game, season, sort, 2, {"filterStatsForTopScoringPeriodIds": {"value": 2, "additionalValue": [f"00{season}", f"10{season}", f"02{season}"]}})
+    print(f"== ESPN {game} {season}")
+    for p in ps:
+        pl = p["player"]; print(" ", pl["fullName"], "ranks:", {k: v.get("rank") for k, v in pl.get("draftRanksByRankType", {}).items()}, "proTeam", pl.get("proTeamId"), "elig", pl.get("eligibleSlots"))
+        for s in pl.get("stats", []):
+            print("   id", s.get("id"), "src", s.get("statSourceId"), "split", s.get("statSplitTypeId"), "sp", s.get("scoringPeriodId"), "applied", round(s.get("appliedTotal", 0) or 0, 1), json.dumps(s.get("stats"))[:900])
+# ESPN fba 2026 bigger pull size / timing
+import time
+t = time.time(); ps = espn_raw("fba", 2026, "STANDARD", 400); print("== fba 400 players", len(ps), round(time.time() - t, 1), "s")
+t = time.time(); ps = espn_raw("flb", 2026, "STANDARD", 600); print("== flb 600 players", len(ps), round(time.time() - t, 1), "s")
+for y in (2023, 2024):
+    r = requests.get("https://fantasyfootballcalculator.com/api/v1/adp/half-ppr", params={"teams": 12, "year": y, "position": "all"}, headers=H, timeout=40).json()
+    print("== FFC", y, r.get("meta"), len(r.get("players", [])))
+r = requests.get("https://statsapi.mlb.com/api/v1/stats", params={"stats": "season", "group": "pitching", "season": 2026, "sportId": 1, "limit": 1, "playerPool": "ALL", "sortStat": "inningsPitched", "order": "desc"}, headers=H, timeout=40).json()
+print("== MLB pitching", json.dumps(r["stats"][0]["splits"][0])[:1500])
+r = requests.get("https://statsapi.mlb.com/api/v1/stats", params={"stats": "season", "group": "hitting", "season": 2026, "sportId": 1, "limit": 1, "playerPool": "ALL", "sortStat": "plateAppearances", "order": "desc"}, headers=H, timeout=40).json()
+print("== MLB hitting", json.dumps(r["stats"][0]["splits"][0])[:1500])
+r = requests.get("https://baseballsavant.mlb.com/leaderboard/expected_statistics", params={"type": "pitcher", "year": 2026, "position": "", "team": "", "min": "100", "csv": "true"}, headers=H, timeout=40)
+print("== Savant pitchers", r.status_code, r.text[:500])
+r = requests.get("https://baseballsavant.mlb.com/leaderboard/custom", params={"year": 2026, "type": "pitcher", "min": "100", "selections": "pa,k_percent,bb_percent,xera,whiff_percent,barrel_batted_rate", "csv": "true"}, headers=H, timeout=40)
+print("== Savant pitchers custom", r.status_code, r.text[:500])
+r = requests.get("https://hashtagbasketball.com/fantasy-basketball-adp", headers=H, timeout=40)
+import re; t = re.sub(r"<[^>]+>", " ", r.text); t = re.sub(r"\s+", " ", t); i = t.find("ADP"); print("== Hashtag ADP text", t[i:i+1200])
