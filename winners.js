@@ -15,7 +15,7 @@
   };
   const css = `
   .lw-bars{display:flex;flex-direction:column;gap:7px;margin:6px 0 2px}
-  .lw-bar{display:grid;grid-template-columns:170px 1fr 110px;align-items:center;gap:10px;font-size:12.5px}
+  .lw-bar{display:grid;grid-template-columns:minmax(92px,150px) minmax(80px,1fr) auto;align-items:center;gap:10px;font-size:12.5px}
   .lw-bar .tr{background:#eef1f5;border-radius:5px;height:16px;position:relative;overflow:hidden}
   .lw-bar .fl{background:var(--acc);height:100%;border-radius:5px}
   .lw-bar .n{color:var(--mute);font-size:12px}
@@ -28,7 +28,7 @@
   .lw-legend b{display:block;margin-bottom:2px}
   .lw-tag{display:inline-block;font-size:10.5px;font-weight:600;border-radius:4px;padding:1px 5px;margin-left:5px;background:#eef1f5;color:#3b4250}
   td.lw-up{color:var(--good);font-weight:700} td.lw-dn{color:var(--bad);font-weight:700}
-  @media(max-width:700px){.lw-bar{grid-template-columns:110px 1fr 70px}}`;
+  @media(max-width:1100px){.lw-grid{grid-template-columns:1fr!important}} .lw-grid>div{min-width:0}`;
   function addCss() {
     if (document.getElementById('lw-css')) return;
     const s = document.createElement('style'); s.id = 'lw-css'; s.textContent = css; document.head.appendChild(s);
@@ -57,7 +57,7 @@
     return `<div class="card"><div class="sec-h"><h2>🏆 Anatomy of a league winner</h2><span class="meta">${e(a.span)} · ${a.n} league winners</span></div>
       <p class="sub">${e(d.intro)}</p>
       <ul class="lw-sum">${a.summary.map(s => `<li>${e(s)}</li>`).join('')}</ul>
-      <div class="grid2" style="margin-top:12px"><div><h3>Where league winners were drafted</h3><p class="sub">Share of all league winners from each part of the draft. "Hit" is the share of players drafted there who became one.</p><div class="lw-bars">${bars}</div></div>
+      <div class="grid2 lw-grid" style="margin-top:12px"><div><h3>Where league winners were drafted</h3><p class="sub">Share of all league winners from each part of the draft. "Hit" is the share of players drafted there who became one.</p><div class="lw-bars">${bars}</div></div>
       <div>${traits}</div></div>${usage}</div>`;
   }
 
