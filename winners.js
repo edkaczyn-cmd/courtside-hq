@@ -44,6 +44,23 @@
   }
   const rp = n => { if (n == null) return '–'; n = Math.max(1, Math.round(n)); if (n > 240) return 'Late / undrafted'; return `Rd ${Math.floor((n - 1) / 12) + 1}.${String((n - 1) % 12 + 1).padStart(2, '0')}`; };
   const head = cols => cols.map(c => `<th class="${c.k === 'pos' ? 'l' : ''}" title="${e(c.tip || '')}">${e(c.label)}</th>`).join('');
+  const OWNER = {};
+  const ownCell = r => {
+    const o = r._own;
+    if (!o) return '<td class="l"><span class="meta" style="margin:0">–</span></td>';
+    const cls = o.s === 'mine' ? 't-me' : o.s === 'team' ? 't-own' : o.s === 'fa' ? 't-buy' : '';
+    return `<td class="l"><span class="lw-tag ${cls}" style="margin:0" title="${e(o.label)}">${e(o.label.length > 18 ? o.label.slice(0, 17) + '…' : o.label)}</span></td>`;
+  };
+  const ownOk = (r, f) => !f || f === 'all' || !r._own ? true
+    : f === 'avail' ? (r._own.s === 'fa' || r._own.s === 'unk')
+    : f === 'mine' ? r._own.s === 'mine' : r._own.s === 'team';
+  const ownNote = (sport) => {
+    const fn = OWNER[sport];
+    if (!fn) return '';
+    const probe = fn.status ? fn.status() : null;
+    if (!probe || !probe.loaded) return `<div class="note" style="margin:8px 0 12px">Load your league's rosters in <b>League Setup</b> to see who owns each player and filter to free agents.</div>`;
+    return `<div class="meta" style="margin:0 0 10px">Ownership from <b>${e(probe.league)}</b>${probe.full ? '' : ' · not every team\'s roster is loaded, so "Not on loaded rosters" may still be owned'}.</div>`;
+  };
   const nameCell = r => `<td class="l"><b>${e(r.n)}</b><span class="meta">${e(r.t || '')}</span></td>`;
 
   function anatomy(d) {
@@ -67,17 +84,21 @@
     if (!t || !t.rows) return '';
     const st = STATE[sport];
     const poss = [...new Set(t.rows.map(r => r.kind ? (r.kind === 'H' ? 'Hitters' : 'Pitchers') : r.pos.split('/')[0]))];
-    const rows = t.rows.filter(r => st.tpos === 'ALL' || (r.kind ? (r.kind === 'H' ? 'Hitters' : 'Pitchers') : r.pos.split('/')[0]) === st.tpos);
+    const hasOwn = !!(OWNER[sport] && OWNER[sport].status && OWNER[sport].status().loaded);
+    t.rows.forEach(r => { r._own = hasOwn ? OWNER[sport](r.n) : null; });
+    const rows = t.rows.filter(r => (st.tpos === 'ALL' || (r.kind ? (r.kind === 'H' ? 'Hitters' : 'Pitchers') : r.pos.split('/')[0]) === st.tpos) && ownOk(r, hasOwn ? st.own : 'all'));
     const cols = d.cols.filter(c => c.k !== 'profit');
     return `<div class="card"><div class="sec-h"><h2>🎯 ${e(t.label)}</h2>
-      <label class="meta">Show <select id="lw-tpos">${['ALL', ...poss].map(p => `<option ${p === st.tpos ? 'selected' : ''}>${e(p)}</option>`).join('')}</select></label></div>
+      <div class="bar" style="margin:0">${hasOwn ? `<label>Owner<select id="lw-own"><option value="all">Everyone</option><option value="avail" ${st.own === 'avail' ? 'selected' : ''}>Free agents</option><option value="mine" ${st.own === 'mine' ? 'selected' : ''}>On my team</option><option value="others" ${st.own === 'others' ? 'selected' : ''}>On other teams</option></select></label>` : ''}
+      <label>Position<select id="lw-tpos">${['ALL', ...poss].map(p => `<option ${p === st.tpos ? 'selected' : ''}>${e(p)}</option>`).join('')}</select></label></div></div>
       <p class="sub">This season's players scored against the traits past league winners shared. Every player here passes the cost check and at least three traits in all, so the list favors players you can still get at a discount.</p>
+      ${ownNote(sport)}
       <div class="lw-legend">${t.checks.map(c => `<div${c.warn ? ' style="background:#fff8ec;border-color:#f3dcae"' : ''}><b>${c.warn ? '⚠ ' : ''}${e(c.label)}</b>${e(c.desc)}</div>`).join('')}</div>
-      ${rows.length ? `<div class="tw"><table><thead><tr><th class="l">Player</th>${head(cols)}<th title="Where he should go in next year's 12-team drafts (round.pick), estimated from this year's draft position and his finish. The market prices in a breakout, so the finish counts more.">Est. next-year pick</th>${t.checks.map(c => `<th title="${e(c.desc)}">${e(c.label.split(' (')[0])}</th>`).join('')}</tr></thead><tbody>
-        ${rows.map(r => `<tr>${nameCell(r)}${cols.map(c => cell(c, r)).join('')}<td title="About pick ${fmt(r.nxt, '0')}">${rp(r.nxt)}</td>${t.checks.map(c => c.warn
+      ${rows.length ? `<div class="tw"><table><thead><tr><th class="l">Player</th>${hasOwn ? '<th class="l">Owner</th>' : ''}${head(cols)}<th title="Where he should go in next year's 12-team drafts (round.pick), estimated from this year's draft position and his finish. The market prices in a breakout, so the finish counts more.">Est. next-year pick</th>${t.checks.map(c => `<th title="${e(c.desc)}">${e(c.label.split(' (')[0])}</th>`).join('')}</tr></thead><tbody>
+        ${rows.map(r => `<tr>${nameCell(r)}${hasOwn ? ownCell(r) : ''}${cols.map(c => cell(c, r)).join('')}<td title="About pick ${fmt(r.nxt, '0')}">${rp(r.nxt)}</td>${t.checks.map(c => c.warn
           ? `<td style="text-align:center" title="${e(r.rbshare || '')}">${r.checks[c.k] ? '<span class="lw-ck w">⚠</span>' : (r.pos === 'RB' ? '<span class="lw-ck n">·</span>' : '')}</td>`
           : `<td style="text-align:center"><span class="lw-ck ${r.checks[c.k] ? 'y' : 'n'}">${r.checks[c.k] ? '✓' : '·'}</span></td>`).join('')}</tr>`).join('')}
-      </tbody></table></div>` : '<div class="empty">No players match enough traits yet.</div>'}
+      </tbody></table></div>` : `<div class="empty">${hasOwn && st.own !== 'all' ? 'No targets match this owner filter.' : 'No players match enough traits yet.'}</div>`}
       ${(t.excluded || []).length ? `<details style="margin-top:10px"><summary class="meta" style="cursor:pointer;margin:0">Big workloads not counted: fill-in roles (${t.excluded.length})</summary>
         <div class="list" style="margin-top:6px">${t.excluded.map(x => `<div class="it"><b>${e(x.n)}</b><span class="meta">${e(x.pos)} · ${e(x.t)}</span><div class="why">${e(x.why)}</div></div>`).join('')}</div></details>` : ''}</div>`;
   }
@@ -85,19 +106,22 @@
   function seasons(d, sport) {
     const st = STATE[sport];
     const s = d.seasons.find(x => x.key === st.season) || d.seasons[0];
-    const list = st.view === 'busts' ? s.busts : s.winners;
+    const showOwn = !s.done && !!(OWNER[sport] && OWNER[sport].status && OWNER[sport].status().loaded);
+    const list = (st.view === 'busts' ? s.busts : s.winners);
+    list.forEach(r => { r._own = showOwn ? OWNER[sport](r.n) : null; });
     return `<div class="card"><div class="sec-h"><h2>📜 League winners by season</h2>
       <div class="bar" style="margin:0"><label>Season<select id="lw-season">${d.seasons.map(x => `<option value="${e(x.key)}" ${x.key === s.key ? 'selected' : ''}>${e(x.label)}</option>`).join('')}</select></label>
       <label>Show<select id="lw-view"><option value="win" ${st.view !== 'busts' ? 'selected' : ''}>League winners</option><option value="busts" ${st.view === 'busts' ? 'selected' : ''}>Biggest busts (early picks)</option></select></label></div></div>
       <p class="sub">${s.done ? '' : `Season in progress${s.weeks ? ` (${s.weeks} weeks)` : ''}: these are the players beating their draft cost so far. `}Draft cost: ${e(s.cost)}. "Finish" is where his value ranked among all players.</p>
-      <div class="tw"><table><thead><tr><th class="l">Player</th>${head(d.cols)}</tr></thead><tbody>
-      ${list.map(r => `<tr>${nameCell(r)}${d.cols.map(c => cell(c, r)).join('')}</tr>`).join('') || '<tr><td colspan="9" class="l">No data</td></tr>'}
+      <div class="tw"><table><thead><tr><th class="l">Player</th>${showOwn ? '<th class="l">Owner</th>' : ''}${head(d.cols)}</tr></thead><tbody>
+      ${list.map(r => `<tr>${nameCell(r)}${showOwn ? ownCell(r) : ''}${d.cols.map(c => cell(c, r)).join('')}</tr>`).join('') || '<tr><td colspan="9" class="l">No data</td></tr>'}
       </tbody></table></div></div>`;
   }
 
-  async function renderWinners(el, sport) {
+  async function renderWinners(el, sport, owner) {
     addCss();
-    STATE[sport] = STATE[sport] || { tpos: 'ALL', view: 'win', season: null };
+    if (owner) OWNER[sport] = owner;
+    STATE[sport] = STATE[sport] || { tpos: 'ALL', view: 'win', season: null, own: 'all' };
     if (!CACHE[sport]) {
       el.innerHTML = '<div class="card"><div class="empty">Loading league-winner research…</div></div>';
       try {
@@ -114,6 +138,7 @@
       `<p class="sub">Sources: ${e(d.sources)}. Updated ${up.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}. Same philosophy as the "Anatomy of a League Winner" research; the picks here come from this tool's own data.</p>`;
     const on = (id, fn) => { const x = el.querySelector('#' + id); if (x) x.onchange = ev => { fn(ev.target.value); renderWinners(el, sport); }; };
     on('lw-tpos', v => st.tpos = v);
+    on('lw-own', v => st.own = v);
     on('lw-season', v => st.season = v);
     on('lw-view', v => st.view = v === 'busts' ? 'busts' : 'win');
   }

@@ -121,7 +121,7 @@ a{color:var(--acc2)}
 <footer id="foot"></footer>
 <div class="modal" id="modal"><div class="card" id="mcard"></div></div>
 
-<script src="winners.js?v=5"></script>
+<script src="winners.js?v=6"></script>
 <script>
 "use strict";
 /* ---------- constants & helpers ---------- */
@@ -591,7 +591,12 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 document.addEventListener('click',e=>{const pn=e.target.closest('.pn'); if(pn&&pn.dataset.p!=null){openPlayer(+pn.dataset.p)}});
 
 /* ---------- shell ---------- */
-const RENDER={rank:renderRank,trade:renderTrade,moves:renderMoves,week:renderWeek,win:()=>window.renderWinners($('#t-win'),'nba'),draft:renderDraft,league:renderLeague};
+/* ---------- League Winners: who owns a player in the active league ---------- */
+function winOwner(name){const p=BYKEY[norm(name)];const o=p?OWN[p.id]:null;
+  if(o!=null) return o===L.my?{s:'mine',label:'Your team'}:{s:'team',label:(L.teams[o]&&L.teams[o].name)||'Another team'};
+  return fullLeague()?{s:'fa',label:'Free agent'}:{s:'unk',label:'Not on loaded rosters'};}
+winOwner.status=()=>({loaded:leagueLoaded(),full:fullLeague(),league:L.name||'your league'});
+const RENDER={rank:renderRank,trade:renderTrade,moves:renderMoves,week:renderWeek,win:()=>window.renderWinners($('#t-win'),'nba',winOwner),draft:renderDraft,league:renderLeague};
 function show(t){V.tab=t; document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); Object.keys(RENDER).forEach(k=>$('#t-'+k).classList.toggle('hide',k!==t)); RENDER[t](); if(location.hash.slice(1)!==t){try{history.replaceState(null,'','#'+t)}catch(e){}} window.scrollTo(0,0);}
 function renderAll(){RENDER[V.tab]()}
 document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
