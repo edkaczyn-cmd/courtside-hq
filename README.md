@@ -2,7 +2,7 @@
 
 Personal fantasy tools for basketball (`index.html`), football (`football.html`) and baseball (`baseball.html`).
 
-**Football:** rest-of-season rankings with points above replacement, a trade analyzer that simulates your starting lineup week by week (playoff weeks called out) and values future draft picks, buy-low/sell-high and waiver lists, a weekly lineup planner, and a mock draft for next season. Data: nflverse via `scripts/refresh_nfl.py` → `data/nfl.json`, refreshed nightly.
+**Football:** rest-of-season rankings with points above replacement, a trade analyzer that simulates your starting lineup week by week (playoff weeks called out) and values future draft picks, buy-low/sell-high and waiver lists, a weekly lineup planner, and a mock draft for next season. Each saved league (League Setup → League picker) keeps its own team count, scoring, lineup (superflex, kicker) and type; rankings and the trade analyzer re-run for whichever league is selected. Dynasty leagues add a next-three-seasons value (keeper: next season), age-adjusted, and a team direction (contending / balanced / rebuilding) that sets how much this season counts against the future. Data: nflverse via `scripts/refresh_nfl.py` → `data/nfl.json`, refreshed nightly.
 
 **Basketball:** rest-of-season rankings with punting, a trade analyzer, buy-low/sell-high and pickup lists, a weekly lineup planner and mock drafts. It runs entirely in the browser; no AI and no accounts are involved.
 
