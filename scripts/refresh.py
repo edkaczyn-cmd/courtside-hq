@@ -293,7 +293,15 @@ def main():
         season_end = TODAY.year + (1 if TODAY.month >= 7 else 0)
         extra = fetch_espn_players(season_end)
         have = {norm(p["n"]) for p in new["players"]}
-        added = [p for p in extra if norm(p["n"]) not in have]
+        # same team + last name + one first name starting with the other catches
+        # short names (Alex vs Alexandre Sarr) without merging Jalen/Jaylin Williams
+        def same_person(a, b):
+            x, y = norm(a["n"]).split(), norm(b["n"]).split()
+            if not x or not y or a.get("t") != b.get("t") or x[-1] != y[-1]:
+                return False
+            return x[0].startswith(y[0]) or y[0].startswith(x[0])
+        added = [p for p in extra if norm(p["n"]) not in have
+                 and not any(same_person(p, q) for q in new["players"])]
         new["players"] = new["players"] + added
         log("deeper pool from ESPN: +", len(added), "players")
     except Exception as e:  # noqa: BLE001
